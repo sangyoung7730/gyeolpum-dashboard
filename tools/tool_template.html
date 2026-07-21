@@ -103,6 +103,7 @@
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn" id="btn-csv">⬇ CSV 내보내기</button>
       <button class="btn" id="btn-tsv">📋 엑셀용 복사</button>
+      <button class="btn" id="btn-share">📡 공유 연결</button>
       <button class="btn primary" id="btn-backup">💾 최신본 저장</button>
       <button class="btn" id="btn-restore">📂 복원</button>
       <input type="file" id="file-restore" accept=".json" style="display:none">
@@ -183,7 +184,8 @@
   <section class="panel">
     <p class="note">
       · <b>자동완성</b>: 생활재번호를 입력하면 생활재명·생산지·담당자가 마스터(2026-07-21 기준 17,543품목)에서 자동 입력됩니다. 자동 입력된 값도 수정 가능합니다.<br>
-      · 입력 데이터는 이 브라우저에 자동 저장되지만, PC 변경·브라우저 초기화에 대비해 <b>💾 최신본 저장</b>을 주기적으로(주 1회 권장) 눌러 파일로 보관하세요. 복원은 📂 복원 버튼.<br>
+      · <b>팀 공동 저장</b>: <b>📡 공유 연결</b>에서 공유서버(Z:)의 「결품보고_공유데이터.json」을 선택하면(최초 1회) 이후 입력·수정·삭제가 자동으로 공유파일에 저장되고, 다른 팀원의 입력도 자동으로 병합되어 표시됩니다(5분마다·창 전환 시 갱신). 브라우저를 다시 열면 「공유 연결」을 눌러 <b>허용</b>만 하면 됩니다.<br>
+      · 공유 미연결 상태에서 <b>💾 최신본 저장</b>을 누르면 현재 데이터가 내장된 대시보드 HTML 파일로 저장됩니다(어느 PC에서 열어도 최신 데이터로 시작). 복원은 📂 복원 버튼(JSON).<br>
       · <b>CSV 내보내기</b>는 엑셀에서 바로 열리는 파일(UTF-8), <b>엑셀용 복사</b>는 현재 필터된 내역을 기존 양식 열 순서(날짜·담당자·번호·품명·주문·결품·사유·예정일·대책·생산지)로 클립보드에 복사해 xlsx에 붙여넣을 수 있습니다.<br>
       · 결품률 = 결품수량 ÷ 총주문수량. 주차는 12/29(월)=1주 기준 자동 계산. 초기 데이터는 「26년_결품사유(최종).xlsx」 1~30주 313건.
     </p>
@@ -193,21 +195,118 @@
 <div class="toast" id="toast"></div>
 </div>
 
-<script>__MASTER__</script>
+<script id="master-data">__MASTER__</script>
+<script id="seed-data">window.SEED_DATA = {"savedAt":null,"entries":__DATA__};</script>
 <script>
-const DEFAULT_DATA = __DATA__;
+const SEED = window.SEED_DATA || { savedAt: null, entries: [] };
 const LS_KEY = 'gyeolpum_dash_v1';
 const WEEK1 = new Date('2025-12-29T00:00:00');
 const weekOf = ds => Math.floor((new Date(ds + 'T00:00:00') - WEEK1) / 604800000) + 1;
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
-let data;
-try { data = JSON.parse(localStorage.getItem(LS_KEY)); } catch (e) { data = null; }
-if (!Array.isArray(data) || !data.length) {
-  data = DEFAULT_DATA.map(e => Object.assign({ id: uid() }, e));
-  save();
+/* ---- 데이터 로드: SEED(내장) vs 로컬 저장분 병합 ---- */
+function normalize(o) {
+  if (!o) return null;
+  if (Array.isArray(o)) return { savedAt: null, entries: o, deleted: [] };
+  return { savedAt: o.savedAt || null, entries: o.entries || [], deleted: o.deleted || [] };
 }
-function save() { try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch (e) {} }
+let deletedIds = new Set();
+function mergeEntries(base, override) {
+  const map = new Map((base || []).map(e => [e.id, e]));
+  (override || []).forEach(e => map.set(e.id, e));
+  return [...map.values()].filter(e => !deletedIds.has(e.id));
+}
+const seedObj = normalize(SEED);
+seedObj.entries = seedObj.entries.map((e, i) => e.id ? e : Object.assign({ id: 'seed-' + i }, e));
+let stored = null;
+try { stored = normalize(JSON.parse(localStorage.getItem(LS_KEY))); } catch (e) {}
+if (stored) (stored.deleted || []).forEach(id => deletedIds.add(id));
+(seedObj.deleted || []).forEach(id => deletedIds.add(id));
+let data;
+if (!stored || !stored.entries.length) {
+  data = mergeEntries(seedObj.entries, []);
+} else if (seedObj.savedAt && (!stored.savedAt || seedObj.savedAt > stored.savedAt)) {
+  data = mergeEntries(seedObj.entries, stored.entries);   // 내장본이 더 최신 → 병합(로컬 우선)
+} else {
+  data = mergeEntries(seedObj.entries.length && !stored.savedAt ? seedObj.entries : [], stored.entries.length ? stored.entries : seedObj.entries);
+  if (!data.length) data = mergeEntries(seedObj.entries, []);
+}
+function save() {
+  try { localStorage.setItem(LS_KEY, JSON.stringify({ savedAt: new Date().toISOString(), entries: data, deleted: [...deletedIds].slice(-500) })); } catch (e) {}
+}
+save();
+
+/* ---- 공유파일 동기화 (팀 공동 저장: Z: 공유서버 JSON) ---- */
+let shareHandle = null, syncTimer = null;
+function idbOpen() { return new Promise(res => { const rq = indexedDB.open('gyeolpum_share', 1);
+  rq.onupgradeneeded = () => rq.result.createObjectStore('kv');
+  rq.onsuccess = () => res(rq.result); rq.onerror = () => res(null); }); }
+async function idbGet(key) { const db = await idbOpen(); if (!db) return null;
+  return new Promise(res => { const g = db.transaction('kv').objectStore('kv').get(key);
+    g.onsuccess = () => res(g.result || null); g.onerror = () => res(null); }); }
+async function idbPut(key, val) { const db = await idbOpen(); if (!db) return;
+  return new Promise(res => { const tx = db.transaction('kv', 'readwrite');
+    tx.objectStore('kv').put(val, key); tx.oncomplete = () => res(); tx.onerror = () => res(); }); }
+function setSyncStatus(txt, ok) {
+  const el = $('last-saved'); el.textContent = ' · ' + txt;
+  el.style.color = ok ? 'var(--acc2)' : 'var(--down)';
+}
+async function mergeRemote() {
+  const file = await shareHandle.getFile();
+  const txt = await file.text();
+  if (txt && txt.trim()) {
+    try {
+      const remote = normalize(JSON.parse(txt));
+      (remote.deleted || []).forEach(id => deletedIds.add(id));
+      data = mergeEntries(remote.entries, data);   // 원격 + 내 입력(내 것 우선) 병합
+    } catch (e) {}
+  }
+}
+async function syncFromShared(silent) {
+  if (!shareHandle) return;
+  try {
+    await mergeRemote(); save(); renderAll();
+    setSyncStatus('📡 공유 연결됨 · 동기화 ' + new Date().toLocaleTimeString('ko-KR'), true);
+  } catch (e) { setSyncStatus('공유 읽기 실패 — 재연결 필요', false); }
+}
+async function syncToShared() {
+  if (!shareHandle) return false;
+  try {
+    await mergeRemote();   // 쓰기 직전 다른 사람 입력 먼저 병합 (덮어쓰기 방지)
+    const w = await shareHandle.createWritable();
+    await w.write(JSON.stringify({ savedAt: new Date().toISOString(), entries: data, deleted: [...deletedIds].slice(-500) }));
+    await w.close();
+    save(); renderAll();
+    setSyncStatus('📡 공유 저장 완료 · ' + new Date().toLocaleTimeString('ko-KR'), true);
+    return true;
+  } catch (e) { setSyncStatus('공유 저장 실패: ' + e.message, false); return false; }
+}
+function scheduleSync() { if (!shareHandle) return; clearTimeout(syncTimer); syncTimer = setTimeout(syncToShared, 1500); }
+async function connectShare() {
+  if (!window.showOpenFilePicker) { toast('이 브라우저는 공유파일을 지원하지 않습니다 — Edge/Chrome을 사용하세요'); return; }
+  try {
+    [shareHandle] = await showOpenFilePicker({ types: [{ description: '결품 공유데이터', accept: { 'application/json': ['.json'] } }] });
+    await idbPut('handle', shareHandle);
+    const perm = await shareHandle.requestPermission({ mode: 'readwrite' });
+    if (perm !== 'granted') { setSyncStatus('공유파일 권한이 거부되었습니다', false); return; }
+    await syncFromShared();
+    await syncToShared();
+    toast('공유파일 연결 완료 — 이제 자동으로 함께 저장됩니다');
+  } catch (e) { if (e.name !== 'AbortError') setSyncStatus('공유 연결 실패: ' + e.message, false); }
+}
+(async () => {   // 시작 시 이전 연결 복구
+  try {
+    const h = await idbGet('handle');
+    if (h && h.queryPermission) {
+      shareHandle = h;
+      const q = await h.queryPermission({ mode: 'readwrite' });
+      if (q === 'granted') { await syncFromShared(); return; }
+      setSyncStatus('공유파일 재연결 필요 — [📡 공유 연결] 클릭 후 파일 선택 또는 허용', false);
+    } else setSyncStatus('공유 미연결 — [📡 공유 연결]에서 Z:\\ 공유파일을 선택하세요', false);
+  } catch (e) { setSyncStatus('공유 미연결', false); }
+})();
+setInterval(() => syncFromShared(true), 5 * 60 * 1000);
+window.addEventListener('focus', () => syncFromShared(true));
 
 const $ = id => document.getElementById(id);
 const fmtN = v => Math.round(v).toLocaleString('ko-KR');
@@ -304,7 +403,7 @@ $('btn-add').addEventListener('click', () => {
     data.push(Object.assign({ id: uid() }, e));
     toast('추가 완료 — ' + e.name);
   }
-  save(); clearForm(); renderAll();
+  save(); clearForm(); renderAll(); scheduleSync();
 });
 $('btn-cancel').addEventListener('click', clearForm);
 
@@ -325,8 +424,9 @@ function startEdit(id) {
 function del(id) {
   const e = data.find(x => x.id === id);
   if (!confirm('삭제할까요?\n' + (e ? e.date + ' ' + e.name : ''))) return;
+  deletedIds.add(id);
   data = data.filter(x => x.id !== id);
-  save(); renderAll(); toast('삭제됨');
+  save(); renderAll(); toast('삭제됨'); scheduleSync();
 }
 
 /* ---- filters ---- */
@@ -549,30 +649,33 @@ $('btn-tsv').addEventListener('click', () => {
   navigator.clipboard.writeText(lines.join('\n')).then(() => toast(`${f.length}건 복사됨 — 엑셀 양식의 '날짜' 열에 붙여넣기`))
     .catch(() => toast('복사 실패 — 브라우저 권한을 확인하세요'));
 });
-const SAVED_KEY = 'gyeolpum_last_saved';
-function showLastSaved() {
-  const t = localStorage.getItem(SAVED_KEY);
-  $('last-saved').textContent = t ? '· 마지막 저장: ' + t : '· ⚠ 아직 저장 안 함';
-}
-$('btn-backup').addEventListener('click', () => {
-  const stamp = new Date().toISOString().slice(0, 10);
-  download('결품보고_최신본_' + stamp + '.json', JSON.stringify(data), 'application/json');
-  try { localStorage.setItem(SAVED_KEY, new Date().toLocaleString('ko-KR')); } catch (e) {}
-  showLastSaved();
-  toast('최신본 저장 완료 — 다운로드 폴더 확인 (' + data.length + '건)');
+$('btn-share').addEventListener('click', connectShare);
+$('btn-backup').addEventListener('click', async () => {
+  if (shareHandle) {
+    const ok = await syncToShared();
+    if (ok) toast('공유파일에 최신본 저장 완료 (' + data.length + '건) — 팀원 입력과 병합됨');
+    return;
+  }
+  // 공유 미연결: 현재 데이터를 내장한 대시보드 HTML 파일로 저장 (열면 최신 데이터로 시작)
+  const payload = 'window.SEED_DATA = ' + JSON.stringify({ savedAt: new Date().toISOString(), entries: data, deleted: [...deletedIds].slice(-500) }) + ';';
+  const clone = document.documentElement.cloneNode(true);
+  const sd = clone.querySelector('#seed-data');
+  if (sd) sd.textContent = payload;
+  download('결품보고_대시보드_최신.html', '<!doctype html>\n' + clone.outerHTML, 'text/html;charset=utf-8');
+  toast('최신 데이터 내장 대시보드 파일로 저장됨 (' + data.length + '건)');
 });
-showLastSaved();
 $('btn-restore').addEventListener('click', () => $('file-restore').click());
 $('file-restore').addEventListener('change', e => {
   const file = e.target.files[0]; if (!file) return;
   const rd = new FileReader();
   rd.onload = () => {
     try {
-      const arr = JSON.parse(rd.result);
-      if (!Array.isArray(arr)) throw 0;
+      const parsed = JSON.parse(rd.result);
+      const arr = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.entries) ? parsed.entries : null);
+      if (!arr) throw 0;
       if (!confirm(`백업 ${arr.length}건으로 현재 데이터(${data.length}건)를 교체할까요?`)) return;
       data = arr.map(x => Object.assign({ id: uid() }, x));
-      save(); renderAll(); toast('복원 완료');
+      save(); renderAll(); toast('복원 완료'); scheduleSync();
     } catch (err) { toast('올바른 백업 파일이 아닙니다'); }
   };
   rd.readAsText(file);
