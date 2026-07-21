@@ -1,0 +1,583 @@
+<title>축수산팀 결품보고 대시보드</title>
+<style>
+  .viz-root {
+    --page:#f9f9f7; --surface-1:#fcfcfb; --ink-1:#0b0b0b; --ink-2:#52514e; --ink-3:#898781;
+    --grid:#e1e0d9; --baseline:#c3c2b7; --border:rgba(11,11,11,0.10);
+    --acc:#2a78d6; --acc2:#1baf7a; --up:#006300; --down:#d03b3b; --chip:#f0efec;
+  }
+  @media (prefers-color-scheme: dark) {
+    .viz-root {
+      --page:#0d0d0d; --surface-1:#1a1a19; --ink-1:#ffffff; --ink-2:#c3c2b7; --ink-3:#898781;
+      --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.10);
+      --acc:#3987e5; --acc2:#199e70; --up:#0ca30c; --down:#e66767; --chip:#262625;
+    }
+  }
+  .viz-root { font-family:"Segoe UI","Malgun Gothic",system-ui,sans-serif; background:var(--page); color:var(--ink-1);
+    margin:0; padding:24px 20px 48px; line-height:1.5; font-size:14px; }
+  .wrap { max-width:1100px; margin:0 auto; display:flex; flex-direction:column; gap:16px; }
+  .hd { display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:10px; }
+  .hd h1 { font-size:20px; font-weight:700; margin:0; }
+  .hd .sub { color:var(--ink-2); font-size:12.5px; }
+  .btn { font-family:inherit; font-size:12.5px; font-weight:700; padding:7px 14px; border-radius:8px;
+    border:1px solid var(--border); background:var(--surface-1); color:var(--ink-1); cursor:pointer; }
+  .btn:hover { border-color:var(--ink-3); }
+  .btn.primary { background:var(--acc); border-color:var(--acc); color:#fff; }
+  .btn.danger { color:var(--down); }
+  .btn:focus-visible { outline:2px solid var(--acc); outline-offset:1px; }
+
+  section.panel { background:var(--surface-1); border:1px solid var(--border); border-radius:10px; padding:16px 18px; }
+  .panel h2 { font-size:14.5px; font-weight:700; margin:0 0 10px; }
+
+  .form-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; }
+  @media (max-width:900px) { .form-grid { grid-template-columns:repeat(3,1fr); } }
+  .fld { display:flex; flex-direction:column; gap:3px; }
+  .fld label { font-size:10.5px; font-weight:700; letter-spacing:.04em; color:var(--ink-3); text-transform:uppercase; }
+  .fld input, .fld select, .fld textarea { font-family:inherit; font-size:13px; padding:7px 9px; border-radius:7px;
+    border:1px solid var(--baseline); background:var(--page); color:var(--ink-1); }
+  .fld input:focus, .fld select:focus, .fld textarea:focus { outline:2px solid var(--acc); outline-offset:0; border-color:var(--acc); }
+  .fld.wide { grid-column:span 3; }
+  .fld.full { grid-column:1 / -1; }
+  .form-foot { display:flex; gap:10px; align-items:center; margin-top:12px; flex-wrap:wrap; }
+  .rate-badge { font-size:12.5px; color:var(--ink-2); }
+  .rate-badge b { font-size:15px; color:var(--ink-1); }
+
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; }
+  .card { background:var(--surface-1); border:1px solid var(--border); border-radius:10px; padding:12px 14px; }
+  .card .lbl { font-size:10.5px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-3); font-weight:700; display:block; }
+  .card .val { font-size:22px; font-weight:700; }
+  .card .val small { font-size:12px; font-weight:600; color:var(--ink-2); }
+  .card .cmp { font-size:11.5px; color:var(--ink-2); display:block; }
+
+  .filters { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
+  .filters select { font-family:inherit; font-size:12.5px; padding:6px 10px; border-radius:7px;
+    border:1px solid var(--baseline); background:var(--page); color:var(--ink-1); }
+  .filters .count { font-size:12px; color:var(--ink-3); margin-left:auto; }
+
+  .two-col { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:820px) { .two-col { grid-template-columns:1fr; } }
+  .chartbox h3 { font-size:12.5px; font-weight:700; margin:0 0 6px; color:var(--ink-2); }
+  .chartbox svg { display:block; width:100%; height:auto; }
+
+  .tblwrap { overflow-x:auto; max-height:560px; overflow-y:auto; }
+  table { border-collapse:collapse; width:100%; font-size:14px; }
+  th { position:sticky; top:0; background:var(--surface-1); text-align:right; font-size:12px; letter-spacing:.04em;
+    color:var(--ink-3); font-weight:700; padding:8px 9px; border-bottom:1px solid var(--baseline); white-space:nowrap; z-index:2; }
+  th.l, td.l { text-align:left; }
+  td { text-align:right; padding:8px 9px; border-bottom:1px solid var(--grid); font-variant-numeric:tabular-nums; white-space:nowrap; line-height:1.45; }
+  td.l { white-space:normal; }
+  td.dim { color:var(--ink-2); }
+  .pill { display:inline-block; padding:1px 8px; border-radius:999px; font-size:11.5px; font-weight:700; background:var(--chip); color:var(--ink-2); }
+  .rowbtn { font-size:13px; padding:3px 10px; border-radius:6px; border:1px solid var(--border); background:transparent; color:var(--ink-2); cursor:pointer; }
+  .date-nav { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
+  .date-nav input[type=date] { font-family:inherit; font-size:13.5px; padding:6px 10px; border-radius:7px;
+    border:1px solid var(--baseline); background:var(--page); color:var(--ink-1); }
+  .date-nav .nav { font-size:13px; font-weight:700; padding:6px 11px; border-radius:7px; border:1px solid var(--border);
+    background:var(--surface-1); color:var(--ink-1); cursor:pointer; }
+  .date-nav .nav:hover { border-color:var(--acc); color:var(--acc); }
+  .date-nav .day-sum { font-size:13px; color:var(--ink-2); margin-left:6px; }
+  .date-nav .day-sum b { color:var(--down); }
+  .col-toggles { display:flex; gap:6px; align-items:center; margin-left:auto; flex-wrap:wrap; }
+  .col-toggles .lbl { font-size:12px; color:var(--ink-3); font-weight:700; }
+  .ctg { font-size:12.5px; font-weight:700; padding:5px 12px; border-radius:16px; cursor:pointer;
+    border:1px solid var(--baseline); background:var(--page); color:var(--ink-3); }
+  .ctg.on { background:var(--acc); border-color:var(--acc); color:#fff; }
+  .ctg:focus-visible { outline:2px solid var(--acc); outline-offset:1px; }
+  .rowbtn:hover { color:var(--down); border-color:var(--down); }
+  .rowbtn.edit:hover { color:var(--acc); border-color:var(--acc); }
+  .note { font-size:11.5px; color:var(--ink-3); line-height:1.6; }
+  #tip { position:fixed; pointer-events:none; z-index:10; display:none; background:var(--ink-1); color:var(--page);
+    border-radius:6px; padding:6px 10px; font-size:12px; box-shadow:0 2px 8px rgba(0,0,0,.25); }
+  @media (prefers-color-scheme: dark) { #tip { background:#f4f4f2; color:#111; } }
+  .toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--ink-1); color:var(--page);
+    padding:9px 18px; border-radius:20px; font-size:13px; font-weight:600; opacity:0; transition:opacity .25s; pointer-events:none; z-index:20; }
+  .toast.show { opacity:1; }
+</style>
+
+<div class="viz-root">
+<div class="wrap">
+  <header class="hd">
+    <div>
+      <h1>축수산팀 결품보고 대시보드</h1>
+      <span class="sub">일일 결품 입력 · 생활재번호 자동완성(마스터 17,543품목) · 자동 분석 <span id="last-saved" style="color:var(--acc2);font-weight:600"></span></span>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" id="btn-csv">⬇ CSV 내보내기</button>
+      <button class="btn" id="btn-tsv">📋 엑셀용 복사</button>
+      <button class="btn primary" id="btn-backup">💾 최신본 저장</button>
+      <button class="btn" id="btn-restore">📂 복원</button>
+      <input type="file" id="file-restore" accept=".json" style="display:none">
+    </div>
+  </header>
+
+  <!-- 입력 -->
+  <section class="panel">
+    <h2 id="form-title">✏️ 결품 입력</h2>
+    <div class="form-grid">
+      <div class="fld"><label>날짜</label><input type="date" id="f-date"></div>
+      <div class="fld"><label>담당자</label><select id="f-mgr">
+        <option>박상영</option><option>임준혁</option><option>이종원</option><option>김한슬</option><option>기타</option></select></div>
+      <div class="fld"><label>생활재번호 <span id="no-hint" style="text-transform:none;font-weight:600"></span></label><input type="number" id="f-no" placeholder="번호 입력 → 자동완성"></div>
+      <div class="fld wide"><label>생활재명 <span style="text-transform:none;font-weight:400;color:var(--ink3)">(번호 입력 시 자동)</span></label><input type="text" id="f-name" placeholder="예: (수)삼치구이(90g)"></div>
+      <div class="fld"><label>총주문수량</label><input type="number" id="f-order" min="0"></div>
+      <div class="fld"><label>결품수량</label><input type="number" id="f-short" min="0"></div>
+      <div class="fld"><label>결품유형</label><select id="f-type">
+        <option>발주관리</option><option>재고관리</option><option>입고·입수 부족</option><option>생산·산지</option>
+        <option>설비·물류</option><option>품질</option><option>설정·운영</option><option>기타</option></select></div>
+      <div class="fld wide"><label>결품사유</label><input type="text" id="f-reason" placeholder="예: 담당자 발주관리 미흡으로 인한 결품 (입력 시 유형 자동 추천)"></div>
+      <div class="fld"><label>생산지</label><input type="text" id="f-origin" placeholder="예: 씨글로벌"></div>
+      <div class="fld"><label>입고예정일</label><input type="text" id="f-eta" placeholder="예: 7/22 입고 예정"></div>
+      <div class="fld full"><label>결품대책</label><input type="text" id="f-action" placeholder="예: 금일 입고 후 익일 정상공급, 조합원 사전 안내"></div>
+    </div>
+    <div class="form-foot">
+      <button class="btn primary" id="btn-add">＋ 추가</button>
+      <button class="btn" id="btn-cancel" style="display:none">취소</button>
+      <span class="rate-badge">결품률: <b id="f-rate">-</b></span>
+      <span class="note" id="f-week"></span>
+    </div>
+  </section>
+
+  <div class="cards" id="kpis"></div>
+
+  <!-- 분석 -->
+  <section class="panel">
+    <h2>📊 분석</h2>
+    <div class="filters">
+      <select id="flt-range">
+        <option value="all">전체 기간</option>
+        <option value="4" selected>최근 4주</option>
+        <option value="8">최근 8주</option>
+        <option value="13">최근 13주(분기)</option>
+      </select>
+      <select id="flt-mgr"><option value="">담당자 전체</option></select>
+      <select id="flt-type"><option value="">유형 전체</option></select>
+      <span class="count" id="flt-count"></span>
+    </div>
+    <div class="two-col">
+      <div class="chartbox"><h3>주차별 결품 건수 · 수량</h3><div id="c-week"></div></div>
+      <div class="chartbox"><h3>결품유형별 건수</h3><div id="c-type"></div></div>
+      <div class="chartbox"><h3>담당자별 건수 · 수량</h3><div id="c-mgr"></div></div>
+      <div class="chartbox"><h3>생산지별 결품 TOP 10 (건수)</h3><div id="c-origin"></div></div>
+    </div>
+  </section>
+
+  <!-- 목록 -->
+  <section class="panel">
+    <h2>📋 결품 내역 <span class="note" style="font-weight:400">(✎ 수정 / ✕ 삭제)</span></h2>
+    <div class="date-nav">
+      <button class="nav" id="day-prev" title="전날">◀</button>
+      <input type="date" id="flt-date">
+      <button class="nav" id="day-next" title="다음날">▶</button>
+      <button class="nav" id="day-today">오늘</button>
+      <button class="nav" id="day-all">전체 보기</button>
+      <span class="day-sum" id="day-sum"></span>
+      <span class="col-toggles" id="col-toggles">
+        <span class="lbl">표시 항목:</span>
+        <button class="ctg" data-col="mgr">담당</button>
+        <button class="ctg" data-col="type">유형</button>
+        <button class="ctg" data-col="origin">생산지</button>
+      </span>
+    </div>
+    <div class="tblwrap"><table id="listtbl"></table></div>
+  </section>
+
+  <section class="panel">
+    <p class="note">
+      · <b>자동완성</b>: 생활재번호를 입력하면 생활재명·생산지·담당자가 마스터(2026-07-21 기준 17,543품목)에서 자동 입력됩니다. 자동 입력된 값도 수정 가능합니다.<br>
+      · 입력 데이터는 이 브라우저에 자동 저장되지만, PC 변경·브라우저 초기화에 대비해 <b>💾 최신본 저장</b>을 주기적으로(주 1회 권장) 눌러 파일로 보관하세요. 복원은 📂 복원 버튼.<br>
+      · <b>CSV 내보내기</b>는 엑셀에서 바로 열리는 파일(UTF-8), <b>엑셀용 복사</b>는 현재 필터된 내역을 기존 양식 열 순서(날짜·담당자·번호·품명·주문·결품·사유·예정일·대책·생산지)로 클립보드에 복사해 xlsx에 붙여넣을 수 있습니다.<br>
+      · 결품률 = 결품수량 ÷ 총주문수량. 주차는 12/29(월)=1주 기준 자동 계산. 초기 데이터는 「26년_결품사유(최종).xlsx」 1~30주 313건.
+    </p>
+  </section>
+</div>
+<div id="tip"></div>
+<div class="toast" id="toast"></div>
+</div>
+
+<script>__MASTER__</script>
+<script>
+const DEFAULT_DATA = __DATA__;
+const LS_KEY = 'gyeolpum_dash_v1';
+const WEEK1 = new Date('2025-12-29T00:00:00');
+const weekOf = ds => Math.floor((new Date(ds + 'T00:00:00') - WEEK1) / 604800000) + 1;
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+let data;
+try { data = JSON.parse(localStorage.getItem(LS_KEY)); } catch (e) { data = null; }
+if (!Array.isArray(data) || !data.length) {
+  data = DEFAULT_DATA.map(e => Object.assign({ id: uid() }, e));
+  save();
+}
+function save() { try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch (e) {} }
+
+const $ = id => document.getElementById(id);
+const fmtN = v => Math.round(v).toLocaleString('ko-KR');
+const toast = msg => { const t = $('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1800); };
+
+/* ---- auto-classify ---- */
+function classify(r) {
+  r = String(r || '');
+  if (!r.trim()) return null;
+  if (/발주/.test(r)) return '발주관리';
+  if (/재고관리|재고 관리|재고부족|재고 부족|스탑재고|전산재고|실재고/.test(r)) return '재고관리';
+  if (/입수|입고수량|입고 수량|박스 입수/.test(r)) return '입고·입수 부족';
+  if (/생산|산지|시즌|어획|작황|수급|미입고/.test(r)) return '생산·산지';
+  if (/설비|피킹|미출고|물류|파손|배송/.test(r)) return '설비·물류';
+  if (/품질|신선도/.test(r)) return '품질';
+  if (/한정수량|오설정|표기오류|설정|주문취소|취소/.test(r)) return '설정·운영';
+  return '기타';
+}
+let typeTouched = false;
+$('f-type').addEventListener('change', () => typeTouched = true);
+$('f-reason').addEventListener('input', () => {
+  if (typeTouched) return;
+  const t = classify($('f-reason').value);
+  if (t) $('f-type').value = t;
+});
+function updRate() {
+  const o = +$('f-order').value, s = +$('f-short').value;
+  $('f-rate').textContent = o > 0 ? (s / o * 100).toFixed(1) + '%' : '-';
+  const d = $('f-date').value;
+  $('f-week').textContent = d ? weekOf(d) + '주차' : '';
+}
+['f-order', 'f-short', 'f-date'].forEach(id => $(id).addEventListener('input', updRate));
+
+/* ---- 생활재번호 → 마스터 자동입력 ---- */
+const MASTER = window.GYEOLPUM_MASTER || {};
+function lookupMaster() {
+  const no = parseInt($('f-no').value);
+  const hint = $('no-hint');
+  if (!no || String(no).length < 3) { hint.textContent = ''; return; }
+  const m = MASTER[no];
+  if (m) {
+    $('f-name').value = m[0];
+    $('f-origin').value = m[1] || '';
+    if (m[2]) {
+      const sel = $('f-mgr');
+      if (![...sel.options].some(o => o.value === m[2] || o.textContent === m[2])) {
+        const opt = document.createElement('option');
+        opt.textContent = m[2];
+        sel.insertBefore(opt, sel.lastElementChild);
+      }
+      sel.value = m[2];
+    }
+    hint.textContent = m[3] === 'Y' ? '✓ 자동입력' : '✓ 자동입력 (공급중지 품목)';
+    hint.style.color = m[3] === 'Y' ? 'var(--acc2)' : 'var(--down)';
+  } else {
+    hint.textContent = '마스터에 없음 — 직접 입력';
+    hint.style.color = 'var(--down)';
+  }
+}
+$('f-no').addEventListener('input', lookupMaster);
+
+/* ---- add / edit ---- */
+let editId = null;
+$('f-date').value = new Date().toISOString().slice(0, 10);
+updRate();
+function readForm() {
+  const date = $('f-date').value;
+  const no = parseInt($('f-no').value);
+  const name = $('f-name').value.trim();
+  const shortQty = +$('f-short').value;
+  if (!date || !name || !shortQty) { toast('날짜 · 생활재명 · 결품수량은 필수입니다'); return null; }
+  return {
+    date, week: weekOf(date), mgr: $('f-mgr').value, no: no || 0, name,
+    orderQty: +$('f-order').value || 0, shortQty,
+    type: $('f-type').value, reason: $('f-reason').value.trim(),
+    eta: $('f-eta').value.trim(), action: $('f-action').value.trim(), origin: $('f-origin').value.trim(),
+  };
+}
+function clearForm() {
+  ['f-no', 'f-name', 'f-order', 'f-short', 'f-reason', 'f-eta', 'f-action', 'f-origin'].forEach(id => $(id).value = '');
+  editId = null; typeTouched = false;
+  $('form-title').textContent = '✏️ 결품 입력';
+  $('btn-add').textContent = '＋ 추가';
+  $('btn-cancel').style.display = 'none';
+  updRate();
+}
+$('btn-add').addEventListener('click', () => {
+  const e = readForm(); if (!e) return;
+  if (editId) {
+    const i = data.findIndex(x => x.id === editId);
+    if (i >= 0) data[i] = Object.assign({ id: editId }, e);
+    toast('수정 저장 완료');
+  } else {
+    data.push(Object.assign({ id: uid() }, e));
+    toast('추가 완료 — ' + e.name);
+  }
+  save(); clearForm(); renderAll();
+});
+$('btn-cancel').addEventListener('click', clearForm);
+
+function startEdit(id) {
+  const e = data.find(x => x.id === id); if (!e) return;
+  editId = id; typeTouched = true;
+  $('f-date').value = e.date; $('f-mgr').value = ['박상영','임준혁','이종원','김한슬'].includes(e.mgr) ? e.mgr : '기타';
+  $('f-no').value = e.no || ''; $('f-name').value = e.name;
+  $('f-order').value = e.orderQty || ''; $('f-short').value = e.shortQty;
+  $('f-type').value = e.type; $('f-reason').value = e.reason;
+  $('f-eta').value = e.eta; $('f-action').value = e.action; $('f-origin').value = e.origin;
+  $('form-title').textContent = '✏️ 결품 수정 중 — ' + e.name;
+  $('btn-add').textContent = '저장';
+  $('btn-cancel').style.display = '';
+  updRate();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+function del(id) {
+  const e = data.find(x => x.id === id);
+  if (!confirm('삭제할까요?\n' + (e ? e.date + ' ' + e.name : ''))) return;
+  data = data.filter(x => x.id !== id);
+  save(); renderAll(); toast('삭제됨');
+}
+
+/* ---- filters ---- */
+function currentWeek() { return weekOf(new Date().toISOString().slice(0, 10)); }
+function filtered() {
+  const range = $('flt-range').value, mgr = $('flt-mgr').value, type = $('flt-type').value;
+  const cw = currentWeek();
+  return data.filter(e =>
+    (range === 'all' || e.week > cw - +range) &&
+    (!mgr || e.mgr === mgr) && (!type || e.type === type));
+}
+['flt-range', 'flt-mgr', 'flt-type'].forEach(id => $(id).addEventListener('change', renderAll));
+
+/* ---- 내역 날짜 필터 ---- */
+let dateFilter = '';
+const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
+function setDate(d) { dateFilter = d; $('flt-date').value = d; renderAll(); }
+function shiftDate(delta) {
+  const base = dateFilter || (data.length ? data.map(e => e.date).sort().pop() : new Date().toISOString().slice(0, 10));
+  const d = new Date(base + 'T00:00:00');
+  d.setDate(d.getDate() + delta);
+  setDate(d.toISOString().slice(0, 10));
+}
+$('flt-date').addEventListener('change', () => { dateFilter = $('flt-date').value; renderAll(); });
+$('day-prev').addEventListener('click', () => shiftDate(dateFilter ? -1 : 0));
+$('day-next').addEventListener('click', () => shiftDate(1));
+$('day-today').addEventListener('click', () => setDate(new Date().toISOString().slice(0, 10)));
+$('day-all').addEventListener('click', () => { dateFilter = ''; $('flt-date').value = ''; renderAll(); });
+
+/* ---- 내역 컬럼 표시/숨기기 (기본: 담당·유형·생산지 숨김) ---- */
+const COLS_KEY = 'gyeolpum_cols_v1';
+let cols;
+try { cols = JSON.parse(localStorage.getItem(COLS_KEY)); } catch (e) { cols = null; }
+if (!cols || typeof cols !== 'object') cols = { mgr: false, type: false, origin: false };
+function syncColToggles() {
+  document.querySelectorAll('#col-toggles .ctg').forEach(b => {
+    b.classList.toggle('on', !!cols[b.dataset.col]);
+    b.title = (cols[b.dataset.col] ? '클릭하여 숨기기' : '클릭하여 표시');
+  });
+}
+$('col-toggles').addEventListener('click', e => {
+  const b = e.target.closest('.ctg'); if (!b) return;
+  cols[b.dataset.col] = !cols[b.dataset.col];
+  try { localStorage.setItem(COLS_KEY, JSON.stringify(cols)); } catch (err) {}
+  syncColToggles(); renderAll();
+});
+syncColToggles();
+
+/* ---- charts ---- */
+const tip = $('tip');
+function showTip(html, x, y) {
+  tip.innerHTML = html; tip.style.display = 'block';
+  let px = x + 12, py = y - tip.offsetHeight - 8;
+  if (px + tip.offsetWidth > innerWidth - 8) px = x - tip.offsetWidth - 12;
+  if (py < 8) py = y + 12;
+  tip.style.left = px + 'px'; tip.style.top = py + 'px';
+}
+function vbar(el, labels, values, opts) {
+  const W = 520, H = 220, padL = 40, padR = 8, padT = 12, padB = 26;
+  const iw = W - padL - padR, ih = H - padT - padB;
+  const ymax = Math.max(1, ...values) * 1.15;
+  const n = labels.length, bw = Math.min(26, iw / n * 0.65);
+  const x = i => padL + iw * (i + .5) / n;
+  const y = v => padT + ih * (1 - v / ymax);
+  let g = '';
+  for (let s = 0; s <= 3; s++) { const v = ymax * s / 3, gy = y(v);
+    g += `<line x1="${padL}" x2="${W - padR}" y1="${gy}" y2="${gy}" stroke="var(--grid)"/>`;
+    g += `<text x="${padL - 5}" y="${gy + 3.5}" text-anchor="end" font-size="9" fill="var(--ink-3)">${Math.round(v)}</text>`; }
+  const step = Math.ceil(n / 16);
+  labels.forEach((l, i) => { if (i % step) return;
+    g += `<text x="${x(i)}" y="${H - 8}" text-anchor="middle" font-size="9.5" fill="var(--ink-3)">${l}</text>`; });
+  values.forEach((v, i) => {
+    g += `<rect x="${x(i) - bw / 2}" y="${y(v)}" width="${bw}" height="${Math.max(0, y(0) - y(v))}" rx="3" fill="${opts.color || 'var(--acc)'}" data-i="${i}"/>`; });
+  const box = $(el);
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}">${g}</svg>`;
+  box.querySelector('svg').onmousemove = e => {
+    const i = e.target.dataset ? e.target.dataset.i : null;
+    if (i == null) { tip.style.display = 'none'; return; }
+    showTip(`<b>${labels[i]}</b><br>${opts.tip(+i)}`, e.clientX, e.clientY);
+  };
+  box.querySelector('svg').onmouseleave = () => tip.style.display = 'none';
+}
+function hbar(el, rows, opts) {
+  const W = 520, rowH = 24, padL = 130, padR = 60, padT = 4;
+  const H = padT + rows.length * rowH + 6;
+  const iw = W - padL - padR;
+  const vmax = Math.max(1, ...rows.map(r => r.v));
+  let g = '';
+  rows.forEach((r, i) => {
+    const y = padT + i * rowH;
+    g += `<text x="${padL - 8}" y="${y + rowH / 2 + 3.5}" text-anchor="end" font-size="10.5" fill="var(--ink-2)">${r.label.length > 11 ? r.label.slice(0, 11) + '…' : r.label}</text>`;
+    g += `<rect x="${padL}" y="${y + 4}" width="${Math.max(2, iw * r.v / vmax)}" height="${rowH - 9}" rx="3" fill="${opts.color || 'var(--acc)'}" data-i="${i}"/>`;
+    g += `<text x="${padL + Math.max(2, iw * r.v / vmax) + 6}" y="${y + rowH / 2 + 3.5}" font-size="10.5" font-weight="700" fill="var(--ink-1)">${opts.vfmt(r)}</text>`;
+  });
+  const box = $(el);
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}">${g}</svg>`;
+  box.querySelector('svg').onmousemove = e => {
+    const i = e.target.dataset ? e.target.dataset.i : null;
+    if (i == null) { tip.style.display = 'none'; return; }
+    showTip(`<b>${rows[i].label}</b><br>${opts.tip(rows[i])}`, e.clientX, e.clientY);
+  };
+  box.querySelector('svg').onmouseleave = () => tip.style.display = 'none';
+}
+
+/* ---- render ---- */
+function renderAll() {
+  // filter option lists
+  const mgrs = [...new Set(data.map(e => e.mgr))].sort();
+  const types = [...new Set(data.map(e => e.type))].sort();
+  const keep = (sel, list, label) => {
+    const cur = sel.value;
+    sel.innerHTML = `<option value="">${label}</option>` + list.map(v => `<option>${v}</option>`).join('');
+    if (list.includes(cur)) sel.value = cur;
+  };
+  keep($('flt-mgr'), mgrs, '담당자 전체');
+  keep($('flt-type'), types, '유형 전체');
+
+  const f = filtered();
+  $('flt-count').textContent = `${f.length}건 표시 / 전체 ${data.length}건`;
+
+  // KPI
+  const cw = currentWeek();
+  const thisWeek = data.filter(e => e.week === cw);
+  const last4 = data.filter(e => e.week > cw - 4 && e.week <= cw);
+  const typeCnt = {};
+  last4.forEach(e => typeCnt[e.type] = (typeCnt[e.type] || 0) + 1);
+  const topType = Object.entries(typeCnt).sort((a, b) => b[1] - a[1])[0];
+  $('kpis').innerHTML = [
+    { l: `이번 주 (${cw}주) 결품`, v: thisWeek.length + '<small> 건</small>', c: '수량 ' + fmtN(thisWeek.reduce((a, e) => a + e.shortQty, 0)) + '개' },
+    { l: '최근 4주 합계', v: last4.length + '<small> 건</small>', c: '주평균 ' + (last4.length / 4).toFixed(1) + '건' },
+    { l: '최근 4주 최다 유형', v: topType ? topType[0] : '-', c: topType ? topType[1] + '건' : '' },
+    { l: '연간 누적', v: data.length + '<small> 건</small>', c: '수량 ' + fmtN(data.reduce((a, e) => a + e.shortQty, 0)) + '개' },
+  ].map(k => `<div class="card"><span class="lbl">${k.l}</span><span class="val">${k.v}</span><span class="cmp">${k.c}</span></div>`).join('');
+
+  // weekly chart
+  const weeks = [...new Set(f.map(e => e.week))].sort((a, b) => a - b);
+  const wCnt = weeks.map(w => f.filter(e => e.week === w).length);
+  const wQty = weeks.map(w => f.filter(e => e.week === w).reduce((a, e) => a + e.shortQty, 0));
+  vbar('c-week', weeks.map(w => w + '주'), wCnt, { tip: i => `건수 ${wCnt[i]}건 · 수량 ${fmtN(wQty[i])}개` });
+
+  // type chart
+  const tAgg = {};
+  f.forEach(e => { tAgg[e.type] = tAgg[e.type] || { v: 0, q: 0 }; tAgg[e.type].v++; tAgg[e.type].q += e.shortQty; });
+  hbar('c-type', Object.entries(tAgg).map(([k, o]) => ({ label: k, v: o.v, q: o.q })).sort((a, b) => b.v - a.v),
+    { vfmt: r => r.v + '건', tip: r => `${r.v}건 · 수량 ${fmtN(r.q)}개` });
+
+  // manager chart
+  const mAgg = {};
+  f.forEach(e => { mAgg[e.mgr] = mAgg[e.mgr] || { v: 0, q: 0 }; mAgg[e.mgr].v++; mAgg[e.mgr].q += e.shortQty; });
+  hbar('c-mgr', Object.entries(mAgg).map(([k, o]) => ({ label: k, v: o.v, q: o.q })).sort((a, b) => b.v - a.v),
+    { color: 'var(--acc2)', vfmt: r => r.v + '건', tip: r => `${r.v}건 · 수량 ${fmtN(r.q)}개` });
+
+  // origin chart
+  const oAgg = {};
+  f.forEach(e => { const k = e.origin || '(미기재)'; oAgg[k] = oAgg[k] || { v: 0, q: 0 }; oAgg[k].v++; oAgg[k].q += e.shortQty; });
+  hbar('c-origin', Object.entries(oAgg).map(([k, o]) => ({ label: k, v: o.v, q: o.q })).sort((a, b) => b.v - a.v).slice(0, 10),
+    { vfmt: r => r.v + '건', tip: r => `${r.v}건 · 수량 ${fmtN(r.q)}개` });
+
+  // table (날짜 필터: 선택 시 해당 날짜만, 담당자/유형 필터는 함께 적용)
+  const mgrSel = $('flt-mgr').value, typeSel = $('flt-type').value;
+  const listData = dateFilter
+    ? data.filter(e => e.date === dateFilter && (!mgrSel || e.mgr === mgrSel) && (!typeSel || e.type === typeSel))
+    : f;
+  if (dateFilter) {
+    const d = new Date(dateFilter + 'T00:00:00');
+    const qty = listData.reduce((a, e) => a + e.shortQty, 0);
+    $('day-sum').innerHTML = `${d.getMonth() + 1}/${d.getDate()}(${DAYS[d.getDay()]}) · <b>${listData.length}건</b> · 결품수량 ${fmtN(qty)}개` +
+      (listData.length === 0 ? ' — 결품 없음 👍' : '');
+  } else {
+    $('day-sum').textContent = `전체 기간(분석 필터 기준) ${listData.length}건 표시 중`;
+  }
+  const rows = [...listData].sort((a, b) => b.date.localeCompare(a.date)).map(e => `<tr>
+    <td class="dim">${e.date.slice(5)}<br><span style="font-size:11.5px">${e.week}주</span></td>
+    ${cols.mgr ? `<td class="dim">${e.mgr}</td>` : ''}
+    <td class="l"><b>${e.name}</b>${e.no ? ' <span style="font-size:11.5px;color:var(--ink-3)">' + e.no + '</span>' : ''}</td>
+    <td>${e.orderQty ? fmtN(e.orderQty) : '-'}</td>
+    <td><b style="color:var(--down)">${fmtN(e.shortQty)}</b></td>
+    <td>${e.orderQty ? (e.shortQty / e.orderQty * 100).toFixed(0) + '%' : '-'}</td>
+    <td class="l">${cols.type ? `<span class="pill">${e.type}</span> ` : ''}${e.reason}</td>
+    <td class="l dim">${e.action || e.eta || ''}</td>
+    ${cols.origin ? `<td class="l dim">${e.origin}</td>` : ''}
+    <td><button class="rowbtn edit" data-act="edit" data-id="${e.id}">✎</button>
+        <button class="rowbtn" data-act="del" data-id="${e.id}">✕</button></td>
+  </tr>`).join('');
+  $('listtbl').innerHTML = `<thead><tr><th class="l">날짜</th>${cols.mgr ? '<th class="l">담당</th>' : ''}<th class="l">생활재</th>
+    <th>주문</th><th>결품</th><th>결품률</th><th class="l">${cols.type ? '유형 · 사유' : '사유'}</th><th class="l">대책/예정</th>${cols.origin ? '<th class="l">생산지</th>' : ''}<th></th></tr></thead>
+    <tbody>${rows}</tbody>`;
+}
+$('listtbl').addEventListener('click', e => {
+  const b = e.target.closest('.rowbtn'); if (!b) return;
+  if (b.dataset.act === 'edit') startEdit(b.dataset.id); else del(b.dataset.id);
+});
+
+/* ---- export / backup ---- */
+function download(name, content, type) {
+  const blob = new Blob([content], { type });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  URL.revokeObjectURL(a.href);
+}
+$('btn-csv').addEventListener('click', () => {
+  const head = ['날짜','주차','담당자','생활재번호','생활재명','총주문수량','결품수량','결품률','결품유형','결품사유','입고예정일','결품대책','생산지'];
+  const lines = [head.join(',')].concat(data.map(e => [
+    e.date, e.week, e.mgr, e.no || '', '"' + e.name.replace(/"/g, '""') + '"', e.orderQty, e.shortQty,
+    e.orderQty ? (e.shortQty / e.orderQty).toFixed(4) : '', e.type,
+    '"' + (e.reason || '').replace(/"/g, '""') + '"', '"' + (e.eta || '').replace(/"/g, '""') + '"',
+    '"' + (e.action || '').replace(/"/g, '""') + '"', '"' + (e.origin || '').replace(/"/g, '""') + '"',
+  ].join(',')));
+  download('결품보고_' + new Date().toISOString().slice(0, 10) + '.csv', '﻿' + lines.join('\r\n'), 'text/csv;charset=utf-8');
+  toast('CSV 다운로드 완료');
+});
+$('btn-tsv').addEventListener('click', () => {
+  const f = filtered().sort((a, b) => a.date.localeCompare(b.date));
+  // 기존 양식 열 순서: 날짜 담당자 번호 품명 총주문 (온라인) (매장) (합계) 결품수량 (분류) 사유 예정일 (추가예정) 대책 (재고유형) (결품유형) 생산지
+  const lines = f.map(e => {
+    const md = e.date.slice(5).split('-');
+    const dstr = `${+md[0]}/${+md[1]}`;
+    return [dstr, e.mgr, e.no || '', e.name, e.orderQty || '', '', '', '', e.shortQty, '', e.reason, e.eta, '', e.action, '', e.type, e.origin].join('\t');
+  });
+  navigator.clipboard.writeText(lines.join('\n')).then(() => toast(`${f.length}건 복사됨 — 엑셀 양식의 '날짜' 열에 붙여넣기`))
+    .catch(() => toast('복사 실패 — 브라우저 권한을 확인하세요'));
+});
+const SAVED_KEY = 'gyeolpum_last_saved';
+function showLastSaved() {
+  const t = localStorage.getItem(SAVED_KEY);
+  $('last-saved').textContent = t ? '· 마지막 저장: ' + t : '· ⚠ 아직 저장 안 함';
+}
+$('btn-backup').addEventListener('click', () => {
+  const stamp = new Date().toISOString().slice(0, 10);
+  download('결품보고_최신본_' + stamp + '.json', JSON.stringify(data), 'application/json');
+  try { localStorage.setItem(SAVED_KEY, new Date().toLocaleString('ko-KR')); } catch (e) {}
+  showLastSaved();
+  toast('최신본 저장 완료 — 다운로드 폴더 확인 (' + data.length + '건)');
+});
+showLastSaved();
+$('btn-restore').addEventListener('click', () => $('file-restore').click());
+$('file-restore').addEventListener('change', e => {
+  const file = e.target.files[0]; if (!file) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    try {
+      const arr = JSON.parse(rd.result);
+      if (!Array.isArray(arr)) throw 0;
+      if (!confirm(`백업 ${arr.length}건으로 현재 데이터(${data.length}건)를 교체할까요?`)) return;
+      data = arr.map(x => Object.assign({ id: uid() }, x));
+      save(); renderAll(); toast('복원 완료');
+    } catch (err) { toast('올바른 백업 파일이 아닙니다'); }
+  };
+  rd.readAsText(file);
+  e.target.value = '';
+});
+
+renderAll();
+</script>

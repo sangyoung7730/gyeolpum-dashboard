@@ -1,0 +1,10 @@
+const fs = require('fs');
+const sp = __dirname;
+const hist = fs.readFileSync(sp + '/history.json', 'utf8');
+const masterJs = fs.readFileSync(sp + '/master-data.js', 'utf8');
+const tpl = fs.readFileSync(sp + '/tool_template.html', 'utf8');
+const html = tpl.replace('__MASTER__', () => masterJs).replace('__DATA__', hist);
+fs.writeFileSync(sp + '/gyeolpum_dashboard.html', html);
+const standalone = '<!doctype html>\n<html lang="ko">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>축수산팀 결품보고 대시보드</title>\n</head>\n<body style="margin:0">\n' + html + '\n</body>\n</html>\n';
+fs.writeFileSync('C:/Users/dure/Desktop/AI 폴더/claude/결품보고_대시보드.html', standalone);
+console.log('built, size:', html.length);
