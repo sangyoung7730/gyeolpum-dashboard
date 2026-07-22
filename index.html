@@ -218,6 +218,9 @@ const LS_KEY = 'gyeolpum_dash_v1';
 const WEEK1 = new Date('2025-12-29T00:00:00');
 const weekOf = ds => Math.floor((new Date(ds + 'T00:00:00') - WEEK1) / 604800000) + 1;
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+/* 날짜는 항상 로컬(한국시간) 기준 — toISOString()은 UTC라 하루 밀림 */
+const dstr = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+const todayStr = () => dstr(new Date());
 
 /* ---- 데이터 로드: SEED(내장) vs 로컬 저장분 병합 ---- */
 function normalize(o) {
@@ -385,7 +388,7 @@ $('f-no').addEventListener('input', lookupMaster);
 
 /* ---- add / edit ---- */
 let editId = null;
-$('f-date').value = new Date().toISOString().slice(0, 10);
+$('f-date').value = todayStr();
 updRate();
 function readForm() {
   const date = $('f-date').value;
@@ -445,7 +448,7 @@ function del(id) {
 }
 
 /* ---- filters ---- */
-function currentWeek() { return weekOf(new Date().toISOString().slice(0, 10)); }
+function currentWeek() { return weekOf(todayStr()); }
 function filtered() {
   const range = $('flt-range').value, mgr = $('flt-mgr').value, type = $('flt-type').value;
   const cw = currentWeek();
@@ -460,15 +463,15 @@ let dateFilter = '';
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
 function setDate(d) { dateFilter = d; $('flt-date').value = d; renderAll(); }
 function shiftDate(delta) {
-  const base = dateFilter || (data.length ? data.map(e => e.date).sort().pop() : new Date().toISOString().slice(0, 10));
+  const base = dateFilter || (data.length ? data.map(e => e.date).sort().pop() : todayStr());
   const d = new Date(base + 'T00:00:00');
   d.setDate(d.getDate() + delta);
-  setDate(d.toISOString().slice(0, 10));
+  setDate(dstr(d));
 }
 $('flt-date').addEventListener('change', () => { dateFilter = $('flt-date').value; renderAll(); });
 $('day-prev').addEventListener('click', () => shiftDate(dateFilter ? -1 : 0));
 $('day-next').addEventListener('click', () => shiftDate(1));
-$('day-today').addEventListener('click', () => setDate(new Date().toISOString().slice(0, 10)));
+$('day-today').addEventListener('click', () => setDate(todayStr()));
 $('day-all').addEventListener('click', () => { dateFilter = ''; $('flt-date').value = ''; renderAll(); });
 
 /* ---- 내역 정렬 (헤더 항목 클릭) ---- */
@@ -682,7 +685,7 @@ $('btn-csv').addEventListener('click', () => {
     '"' + (e.reason || '').replace(/"/g, '""') + '"', '"' + (e.eta || '').replace(/"/g, '""') + '"',
     '"' + (e.action || '').replace(/"/g, '""') + '"', '"' + (e.origin || '').replace(/"/g, '""') + '"',
   ].join(',')));
-  download('결품보고_' + new Date().toISOString().slice(0, 10) + '.csv', '﻿' + lines.join('\r\n'), 'text/csv;charset=utf-8');
+  download('결품보고_' + todayStr() + '.csv', '﻿' + lines.join('\r\n'), 'text/csv;charset=utf-8');
   toast('CSV 다운로드 완료');
 });
 $('btn-tsv').addEventListener('click', () => {
