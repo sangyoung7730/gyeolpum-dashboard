@@ -60,12 +60,18 @@
 
   .tblwrap { overflow-x:auto; max-height:560px; overflow-y:auto; }
   table { border-collapse:collapse; width:100%; font-size:14px; }
-  th { position:sticky; top:0; background:var(--surface-1); text-align:right; font-size:12px; letter-spacing:.04em;
-    color:var(--ink-3); font-weight:700; padding:8px 9px; border-bottom:1px solid var(--baseline); white-space:nowrap; z-index:2; }
+  th { position:sticky; top:0; background:color-mix(in srgb, var(--acc) 15%, var(--surface-1)); text-align:right; font-size:13px; letter-spacing:.03em;
+    color:var(--ink-1); font-weight:800; padding:8px 7px; border-bottom:2px solid var(--acc); white-space:nowrap; z-index:2; cursor:pointer; user-select:none; }
+  th:hover { background:color-mix(in srgb, var(--acc) 26%, var(--surface-1)); }
+  th .arr { font-size:10px; color:var(--acc); }
   th.l, td.l { text-align:left; }
-  td { text-align:right; padding:8px 9px; border-bottom:1px solid var(--grid); font-variant-numeric:tabular-nums; white-space:nowrap; line-height:1.45; }
+  td { text-align:right; padding:7px 7px; border-bottom:1px solid var(--grid); font-variant-numeric:tabular-nums; white-space:nowrap; line-height:1.4; }
   td.l { white-space:normal; }
   td.dim { color:var(--ink-2); }
+  .clamp2 { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; word-break:break-word; }
+  th.c-xs, td.c-xs { width:52px; }
+  th.c-sm, td.c-sm { width:64px; }
+  th.c-md, td.c-md { width:92px; }
   .pill { display:inline-block; padding:1px 8px; border-radius:999px; font-size:11.5px; font-weight:700; background:var(--chip); color:var(--ink-2); }
   .rowbtn { font-size:13px; padding:3px 10px; border-radius:6px; border:1px solid var(--border); background:transparent; color:var(--ink-2); cursor:pointer; }
   .date-nav { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
@@ -456,6 +462,22 @@ $('day-next').addEventListener('click', () => shiftDate(1));
 $('day-today').addEventListener('click', () => setDate(new Date().toISOString().slice(0, 10)));
 $('day-all').addEventListener('click', () => { dateFilter = ''; $('flt-date').value = ''; renderAll(); });
 
+/* ---- 내역 정렬 (헤더 항목 클릭) ---- */
+let sortKey = 'date', sortDir = -1;
+const SORT_NUM = { orderQty: 1, shortQty: 1, rate: 1 };
+function sortVal(e, k) {
+  if (k === 'rate') return e.orderQty ? e.shortQty / e.orderQty : -1;
+  const v = e[k]; return v == null ? '' : v;
+}
+function sortRows(arr) {
+  return [...arr].sort((a, b) => {
+    const r = SORT_NUM[sortKey]
+      ? (sortVal(a, sortKey) - sortVal(b, sortKey)) * sortDir
+      : String(sortVal(a, sortKey)).localeCompare(String(sortVal(b, sortKey)), 'ko') * sortDir;
+    return r || b.date.localeCompare(a.date);
+  });
+}
+
 /* ---- 내역 컬럼 표시/숨기기 (기본: 담당·유형·생산지 숨김) ---- */
 const COLS_KEY = 'gyeolpum_cols_v1';
 let cols;
@@ -598,26 +620,42 @@ function renderAll() {
   } else {
     $('day-sum').textContent = `전체 기간(분석 필터 기준) ${listData.length}건 표시 중`;
   }
-  const rows = [...listData].sort((a, b) => b.date.localeCompare(a.date)).map(e => `<tr>
-    <td class="dim">${e.date.slice(5)}<br><span style="font-size:11.5px">${e.week}주</span></td>
-    ${cols.mgr ? `<td class="dim">${e.mgr}</td>` : ''}
-    <td class="l"><b>${e.name}</b>${e.no ? ' <span style="font-size:11.5px;color:var(--ink-3)">' + e.no + '</span>' : ''}</td>
-    <td>${e.orderQty ? fmtN(e.orderQty) : '-'}</td>
-    <td><b style="color:var(--down)">${fmtN(e.shortQty)}</b></td>
-    <td>${e.orderQty ? (e.shortQty / e.orderQty * 100).toFixed(0) + '%' : '-'}</td>
-    <td class="l">${cols.type ? `<span class="pill">${e.type}</span> ` : ''}${e.reason}</td>
-    <td class="l dim">${e.action || e.eta || ''}</td>
-    ${cols.origin ? `<td class="l dim">${e.origin}</td>` : ''}
-    <td><button class="rowbtn edit" data-act="edit" data-id="${e.id}">✎</button>
+  const at = s => String(s || '').replace(/"/g, '&quot;');
+  const rows = sortRows(listData).map(e => `<tr>
+    <td class="dim c-sm">${e.date.slice(5)}<br><span style="font-size:11.5px">${e.week}주</span></td>
+    ${cols.mgr ? `<td class="dim c-sm">${e.mgr}</td>` : ''}
+    <td class="l"><div class="clamp2" title="${at(e.name)}"><b>${e.name}</b>${e.no ? ' <span style="font-size:11.5px;color:var(--ink-3)">' + e.no + '</span>' : ''}</div></td>
+    <td class="c-xs">${e.orderQty ? fmtN(e.orderQty) : '-'}</td>
+    <td class="c-xs"><b style="color:var(--down)">${fmtN(e.shortQty)}</b></td>
+    <td class="c-xs">${e.orderQty ? (e.shortQty / e.orderQty * 100).toFixed(0) + '%' : '-'}</td>
+    <td class="l"><div class="clamp2" title="${at(e.reason)}">${cols.type ? `<span class="pill">${e.type}</span> ` : ''}${e.reason}</div></td>
+    <td class="l dim"><div class="clamp2" title="${at(e.action || e.eta)}">${e.action || e.eta || ''}</div></td>
+    ${cols.origin ? `<td class="l dim c-md"><div class="clamp2">${e.origin}</div></td>` : ''}
+    <td class="c-sm"><button class="rowbtn edit" data-act="edit" data-id="${e.id}">✎</button>
         <button class="rowbtn" data-act="del" data-id="${e.id}">✕</button></td>
   </tr>`).join('');
-  $('listtbl').innerHTML = `<thead><tr><th class="l">날짜</th>${cols.mgr ? '<th class="l">담당</th>' : ''}<th class="l">생활재</th>
-    <th>주문</th><th>결품</th><th>결품률</th><th class="l">${cols.type ? '유형 · 사유' : '사유'}</th><th class="l">대책/예정</th>${cols.origin ? '<th class="l">생산지</th>' : ''}<th></th></tr></thead>
-    <tbody>${rows}</tbody>`;
+  const arrow = k => sortKey === k ? `<span class="arr">${sortDir > 0 ? '▲' : '▼'}</span>` : '';
+  const TH = (k, label, cls) => `<th${cls ? ` class="${cls}"` : ''}${k ? ` data-sort="${k}" title="클릭하여 정렬"` : ' style="cursor:default"'}>${label}${k ? ' ' + arrow(k) : ''}</th>`;
+  $('listtbl').innerHTML = '<thead><tr>' +
+    TH('date', '날짜', 'l c-sm') +
+    (cols.mgr ? TH('mgr', '담당', 'l c-sm') : '') +
+    TH('name', '생활재', 'l') +
+    TH('orderQty', '주문', 'c-xs') + TH('shortQty', '결품', 'c-xs') + TH('rate', '결품률', 'c-xs') +
+    TH(cols.type ? 'type' : 'reason', cols.type ? '유형 · 사유' : '사유', 'l') +
+    TH('action', '대책/예정', 'l') +
+    (cols.origin ? TH('origin', '생산지', 'l c-md') : '') +
+    `<th class="c-sm" style="cursor:default"></th></tr></thead><tbody>${rows}</tbody>`;
 }
 $('listtbl').addEventListener('click', e => {
-  const b = e.target.closest('.rowbtn'); if (!b) return;
-  if (b.dataset.act === 'edit') startEdit(b.dataset.id); else del(b.dataset.id);
+  const b = e.target.closest('.rowbtn');
+  if (b) { if (b.dataset.act === 'edit') startEdit(b.dataset.id); else del(b.dataset.id); return; }
+  const th = e.target.closest('th[data-sort]');
+  if (th) {
+    const k = th.dataset.sort;
+    if (sortKey === k) sortDir = -sortDir;
+    else { sortKey = k; sortDir = SORT_NUM[k] ? -1 : (k === 'date' ? -1 : 1); }
+    renderAll();
+  }
 });
 
 /* ---- export / backup ---- */
