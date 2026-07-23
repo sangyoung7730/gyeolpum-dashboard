@@ -66,6 +66,9 @@
   .chartbox h3 { font-size:12.5px; font-weight:700; margin:0 0 6px; color:var(--ink-2); }
   .chartbox svg { display:block; width:100%; height:auto; }
 
+  .share-banner { display:flex; align-items:center; gap:12px; flex-wrap:wrap; background:color-mix(in srgb, var(--acc) 10%, var(--surface-1));
+    border:1.5px solid var(--acc); border-radius:11px; padding:11px 15px; font-size:13.5px; font-weight:600; }
+  .share-banner .btn { flex-shrink:0; }
   .tblwrap { overflow-x:auto; max-height:560px; overflow-y:auto; }
   table { border-collapse:collapse; width:100%; font-size:14px; }
   th { position:sticky; top:0; background:color-mix(in srgb, var(--acc) 15%, var(--surface-1)); text-align:right; font-size:13px; letter-spacing:.03em;
@@ -123,6 +126,8 @@
       <input type="file" id="file-restore" accept=".json" style="display:none">
     </div>
   </header>
+
+  <div class="share-banner" id="share-banner" style="display:none"></div>
 
   <!-- 입력 -->
   <section class="panel">
@@ -198,7 +203,8 @@
   <section class="panel">
     <p class="note">
       · <b>자동완성</b>: 생활재번호를 입력하면 생활재명·생산지·담당자가 마스터(2026-07-21 기준 17,543품목)에서 자동 입력됩니다. 자동 입력된 값도 수정 가능합니다.<br>
-      · <b>팀 공동 저장</b>: <b>📡 공유 연결</b>에서 공유서버(Z:)의 「결품보고_공유데이터.json」을 선택하면(최초 1회) 이후 입력·수정·삭제가 자동으로 공유파일에 저장되고, 다른 팀원의 입력도 자동으로 병합되어 표시됩니다(5분마다·창 전환 시 갱신). 브라우저를 다시 열면 「공유 연결」을 눌러 <b>허용</b>만 하면 됩니다.<br>
+      · <b>팀 공동 저장</b>: 화면 위 파란 배너의 <b>[공유파일 연결]</b>로 공유서버(Z:)의 「결품보고_공유데이터.json」을 선택하면(최초 1회) 이후 입력·수정·삭제가 자동으로 공유파일에 저장되고, 다른 팀원의 입력도 자동으로 병합되어 표시됩니다(5분마다·창 전환 시 갱신).<br>
+      · 브라우저를 다시 열면 배너의 <b>[허용하고 재연결]</b>을 한 번만 클릭하세요. 허용 창에서 <b>"모든 방문에서 허용"</b>을 선택하면 다음부터는 자동 연결됩니다. 제목 옆 상태가 <b style="color:var(--acc2)">초록색 "공유 연결됨"</b>이어야 팀 공유가 작동 중인 것입니다.<br>
       · 공유 미연결 상태에서 <b>💾 최신본 저장</b>을 누르면 현재 데이터가 내장된 대시보드 HTML 파일로 저장됩니다(어느 PC에서 열어도 최신 데이터로 시작). 복원은 📂 복원 버튼(JSON).<br>
       · <b>CSV 내보내기</b>는 엑셀에서 바로 열리는 파일(UTF-8), <b>엑셀용 복사</b>는 현재 필터된 내역을 기존 양식 열 순서(날짜·담당자·번호·품명·주문·결품·사유·예정일·대책·생산지)로 클립보드에 복사해 xlsx에 붙여넣을 수 있습니다.<br>
       · 결품률 = 결품수량 ÷ 총주문수량. 주차는 12/29(월)=1주 기준 자동 계산. 초기 데이터는 「26년_결품사유(최종).xlsx」 1~30주 313건.
@@ -280,51 +286,101 @@ async function mergeRemote() {
     } catch (e) {}
   }
 }
-async function syncFromShared(silent) {
+function showShareBanner(msg, btnLabel, action) {
+  const b = document.getElementById('share-banner');
+  b.innerHTML = '<span>' + msg + '</span>';
+  const btn = document.createElement('button');
+  btn.className = 'btn primary'; btn.textContent = btnLabel;
+  btn.addEventListener('click', action);
+  b.appendChild(btn); b.style.display = 'flex';
+}
+function hideShareBanner() { document.getElementById('share-banner').style.display = 'none'; }
+async function ensurePermission(interactive) {
+  if (!shareHandle) return false;
+  try {
+    let p = await shareHandle.queryPermission({ mode: 'readwrite' });
+    if (p !== 'granted' && interactive) p = await shareHandle.requestPermission({ mode: 'readwrite' });
+    return p === 'granted';
+  } catch (e) { return false; }
+}
+function needReconnect() {
+  setSyncStatus('공유파일 다시 허용 필요', false);
+  showShareBanner('📡 공유파일 접근을 다시 허용해 주세요 (브라우저를 새로 열면 보안상 매번 필요합니다). 허용 창에서 "모든 방문에서 허용"을 선택하면 다음부터 묻지 않습니다.', '허용하고 재연결', reconnect);
+}
+async function reconnect() {
+  if (await ensurePermission(true)) {
+    hideShareBanner();
+    await syncFromShared(); await syncToShared();
+    toast('공유 재연결 완료 — 팀 데이터와 동기화되었습니다');
+  } else {
+    toast('허용이 거부되었습니다 — [📡 공유 연결] 버튼에서 파일을 다시 선택해 주세요');
+  }
+}
+async function syncFromShared() {
   if (!shareHandle) return;
+  if (!await ensurePermission(false)) { needReconnect(); return; }
   try {
     await mergeRemote(); save(); renderAll();
-    setSyncStatus('📡 공유 연결됨 · 동기화 ' + new Date().toLocaleTimeString('ko-KR'), true);
-  } catch (e) { setSyncStatus('공유 읽기 실패 — 재연결 필요', false); }
+    setSyncStatus('📡 공유 연결됨 · ' + data.length + '건 · 동기화 ' + new Date().toLocaleTimeString('ko-KR'), true);
+    hideShareBanner();
+  } catch (e) { setSyncStatus('공유 읽기 실패 — 공유서버(Z:) 연결을 확인하세요', false); }
 }
-async function syncToShared() {
+let retryTimer = null;
+async function syncToShared(isRetry) {
   if (!shareHandle) return false;
+  if (!await ensurePermission(false)) { needReconnect(); return false; }
   try {
     await mergeRemote();   // 쓰기 직전 다른 사람 입력 먼저 병합 (덮어쓰기 방지)
     const w = await shareHandle.createWritable();
     await w.write(JSON.stringify({ savedAt: new Date().toISOString(), entries: data, deleted: [...deletedIds].slice(-500) }));
     await w.close();
     save(); renderAll();
-    setSyncStatus('📡 공유 저장 완료 · ' + new Date().toLocaleTimeString('ko-KR'), true);
+    setSyncStatus('📡 공유 저장 완료 · ' + data.length + '건 · ' + new Date().toLocaleTimeString('ko-KR'), true);
+    hideShareBanner();
     return true;
-  } catch (e) { setSyncStatus('공유 저장 실패: ' + e.message, false); return false; }
+  } catch (e) {
+    setSyncStatus('공유 저장 실패(' + e.message + ') — 잠시 후 자동 재시도', false);
+    if (!isRetry) { clearTimeout(retryTimer); retryTimer = setTimeout(() => syncToShared(true), 5000); }
+    return false;
+  }
 }
-function scheduleSync() { if (!shareHandle) return; clearTimeout(syncTimer); syncTimer = setTimeout(syncToShared, 1500); }
-async function connectShare() {
-  if (!window.showOpenFilePicker) { toast('이 브라우저는 공유파일을 지원하지 않습니다 — Edge/Chrome을 사용하세요'); return; }
+function scheduleSync() { if (!shareHandle) return; clearTimeout(syncTimer); syncTimer = setTimeout(() => syncToShared(), 1500); }
+async function pickShare() {
   try {
     [shareHandle] = await showOpenFilePicker({ types: [{ description: '결품 공유데이터', accept: { 'application/json': ['.json'] } }] });
     await idbPut('handle', shareHandle);
-    const perm = await shareHandle.requestPermission({ mode: 'readwrite' });
-    if (perm !== 'granted') { setSyncStatus('공유파일 권한이 거부되었습니다', false); return; }
+    if (!await ensurePermission(true)) { setSyncStatus('공유파일 권한이 거부되었습니다', false); return; }
     await syncFromShared();
     await syncToShared();
     toast('공유파일 연결 완료 — 이제 자동으로 함께 저장됩니다');
   } catch (e) { if (e.name !== 'AbortError') setSyncStatus('공유 연결 실패: ' + e.message, false); }
+}
+async function connectShare() {
+  if (!window.showOpenFilePicker) { toast('이 브라우저는 공유 기능을 지원하지 않습니다 — Edge 또는 Chrome으로 열어주세요'); return; }
+  // 이전에 연결한 파일이 있으면 파일 선택 없이 허용만으로 재연결
+  if (shareHandle && await ensurePermission(true)) {
+    hideShareBanner();
+    await syncFromShared(); await syncToShared();
+    toast('공유 연결 확인 — 동기화 완료');
+    return;
+  }
+  await pickShare();
 }
 (async () => {   // 시작 시 이전 연결 복구
   try {
     const h = await idbGet('handle');
     if (h && h.queryPermission) {
       shareHandle = h;
-      const q = await h.queryPermission({ mode: 'readwrite' });
-      if (q === 'granted') { await syncFromShared(); return; }
-      setSyncStatus('공유파일 재연결 필요 — [📡 공유 연결] 클릭 후 파일 선택 또는 허용', false);
-    } else setSyncStatus('공유 미연결 — [📡 공유 연결]에서 Z:\\ 공유파일을 선택하세요', false);
+      if (await ensurePermission(false)) { await syncFromShared(); return; }
+      needReconnect();   // 배너에서 클릭 한 번으로 허용
+    } else {
+      setSyncStatus('공유 미연결', false);
+      showShareBanner('📡 팀 공유가 아직 연결되지 않았습니다 — 공유서버(Z:)의 「결품보고_공유데이터.json」을 한 번만 선택해 주세요.', '공유파일 연결', pickShare);
+    }
   } catch (e) { setSyncStatus('공유 미연결', false); }
 })();
-setInterval(() => syncFromShared(true), 5 * 60 * 1000);
-window.addEventListener('focus', () => syncFromShared(true));
+setInterval(() => { if (shareHandle) syncFromShared(); }, 5 * 60 * 1000);
+window.addEventListener('focus', () => { if (shareHandle) syncFromShared(); });
 
 const $ = id => document.getElementById(id);
 const fmtN = v => Math.round(v).toLocaleString('ko-KR');
