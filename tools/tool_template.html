@@ -37,6 +37,28 @@
   .fld input:focus, .fld select:focus, .fld textarea:focus { outline:2px solid var(--acc); outline-offset:0; border-color:var(--acc); }
   .fld.wide { grid-column:span 3; }
   .fld.full { grid-column:1 / -1; }
+  /* 담당자 추가·삭제 */
+  #mgr-editor[hidden] { display:none; }
+  .mgr-add-btn { font-family:inherit; font-size:11px; font-weight:700; line-height:1; padding:2px 6px; margin-left:4px;
+    border-radius:5px; border:1px solid var(--baseline); background:var(--chip); color:var(--ink-2);
+    cursor:pointer; text-transform:none; vertical-align:middle; }
+  .mgr-add-btn:hover { border-color:var(--acc); color:var(--acc); }
+  .mgr-add-btn:focus-visible { outline:2px solid var(--acc); outline-offset:1px; }
+  .mgr-box { border:1px solid var(--baseline); border-radius:8px; padding:10px; background:var(--chip);
+    display:flex; flex-direction:column; gap:8px; }
+  .mgr-row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .mgr-row input { flex:1; min-width:160px; font-family:inherit; font-size:13px; padding:7px 9px;
+    border-radius:7px; border:1px solid var(--baseline); background:var(--page); color:var(--ink-1); }
+  .mgr-row input:focus { outline:2px solid var(--acc); outline-offset:0; border-color:var(--acc); }
+  .mgr-chips { display:flex; gap:6px; flex-wrap:wrap; }
+  .mgr-chip { display:inline-flex; align-items:center; gap:4px; font-size:12px; padding:3px 5px 3px 10px;
+    border-radius:20px; border:1px solid var(--baseline); background:var(--page); color:var(--ink-1); }
+  .mgr-chip.fixed { color:var(--ink-3); padding-right:10px; }
+  .mgr-chip button { font-family:inherit; font-size:14px; line-height:1; border:none; background:none;
+    cursor:pointer; color:var(--down); padding:0 3px; border-radius:50%; }
+  .mgr-chip button:hover { background:var(--chip); }
+  .mgr-msg { font-size:11.5px; color:var(--ink-3); }
+  .mgr-msg.warn { color:var(--down); font-weight:700; }
   .form-foot { display:flex; gap:10px; align-items:center; margin-top:12px; flex-wrap:wrap; }
   .rate-badge { font-size:12.5px; color:var(--ink-2); }
   .rate-badge b { font-size:15px; color:var(--ink-1); }
@@ -127,8 +149,7 @@
     <h2 id="form-title">✏️ 결품 입력</h2>
     <div class="form-grid">
       <div class="fld"><label>날짜</label><input type="date" id="f-date"></div>
-      <div class="fld"><label>담당자</label><select id="f-mgr">
-        <option>박상영</option><option>임준혁</option><option>이종원</option><option>김한슬</option><option>기타</option></select></div>
+      <div class="fld"><label>담당자 <button type="button" class="mgr-add-btn" id="btn-mgr-edit" title="담당자 추가·삭제">＋</button></label><select id="f-mgr"></select></div>
       <div class="fld"><label>생활재번호 <span id="no-hint" style="text-transform:none;font-weight:600"></span></label><input type="number" id="f-no" placeholder="번호 입력 → 자동완성"></div>
       <div class="fld wide"><label>생활재명 <span style="text-transform:none;font-weight:400;color:var(--ink3)">(번호 입력 시 자동)</span></label><input type="text" id="f-name" placeholder="예: (수)삼치구이(90g)"></div>
       <div class="fld"><label>총주문수량</label><input type="number" id="f-order" min="0"></div>
@@ -140,6 +161,18 @@
       <div class="fld"><label>생산지</label><input type="text" id="f-origin" placeholder="예: 씨글로벌"></div>
       <div class="fld"><label>입고예정일</label><input type="text" id="f-eta" placeholder="예: 7/22 입고 예정"></div>
       <div class="fld full"><label>결품대책</label><input type="text" id="f-action" placeholder="예: 금일 입고 후 익일 정상공급, 조합원 사전 안내"></div>
+      <div class="fld full" id="mgr-editor" hidden>
+        <label>담당자 관리</label>
+        <div class="mgr-box">
+          <div class="mgr-row">
+            <input type="text" id="mgr-new" placeholder="추가할 담당자 이름" maxlength="20" autocomplete="off">
+            <button type="button" class="btn primary" id="btn-mgr-add">추가</button>
+            <button type="button" class="btn" id="btn-mgr-close">닫기</button>
+          </div>
+          <div class="mgr-chips" id="mgr-chips"></div>
+          <div class="mgr-msg" id="mgr-msg">기본 담당자는 삭제할 수 없습니다. 추가한 담당자는 이 브라우저에만 저장됩니다.</div>
+        </div>
+      </div>
     </div>
     <div class="form-foot">
       <button class="btn primary" id="btn-add">＋ 추가</button>
@@ -392,6 +425,93 @@ async function diagnoseShare() {
 document.getElementById('btn-diag').addEventListener('click', diagnoseShare);
 
 const $ = id => document.getElementById(id);
+
+/* ---- 담당자 목록 (기본 + 사용자 추가분) ---- */
+const MGR_KEY = 'gyeolpum_mgrs_v1';
+const MGR_BASE = ['박상영', '임준혁', '이종원', '김한슬', '안민우'];
+let mgrCustom = [];
+try {
+  const v = JSON.parse(localStorage.getItem(MGR_KEY));
+  if (Array.isArray(v)) mgrCustom = v.map(x => String(x || '').trim()).filter(x => x && !MGR_BASE.includes(x));
+} catch (e) {}
+function saveMgrs() { try { localStorage.setItem(MGR_KEY, JSON.stringify(mgrCustom)); } catch (e) {} }
+
+// 기본 + 추가분 + 기존 내역에 이미 쓰인 이름(누락 방지)
+function mgrList() {
+  const seen = new Set(), out = [];
+  const push = v => { const s = String(v || '').trim(); if (s && s !== '기타' && !seen.has(s)) { seen.add(s); out.push(s); } };
+  MGR_BASE.forEach(push); mgrCustom.forEach(push);
+  (typeof data !== 'undefined' ? data : []).forEach(e => push(e.mgr));
+  return out;
+}
+function renderMgrSelect() {
+  const sel = $('f-mgr'); if (!sel) return;
+  const cur = sel.value;
+  const list = mgrList();
+  sel.innerHTML = list.map(m => '<option>' + m.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</option>').join('') + '<option>기타</option>';
+  sel.value = list.includes(cur) || cur === '기타' ? cur : list[0];
+}
+function mgrMsg(txt, warn) {
+  const el = $('mgr-msg'); if (!el) return;
+  el.textContent = txt;
+  el.className = 'mgr-msg' + (warn ? ' warn' : '');
+}
+function renderMgrChips() {
+  const box = $('mgr-chips'); if (!box) return;
+  const used = new Set((typeof data !== 'undefined' ? data : []).map(e => String(e.mgr || '').trim()));
+  box.innerHTML = '';
+  MGR_BASE.forEach(m => {
+    const c = document.createElement('span');
+    c.className = 'mgr-chip fixed'; c.textContent = m; c.title = '기본 담당자';
+    box.appendChild(c);
+  });
+  mgrCustom.forEach(m => {
+    const c = document.createElement('span');
+    c.className = 'mgr-chip';
+    c.appendChild(document.createTextNode(m));
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = '×';
+    b.title = used.has(m) ? '이 담당자의 결품 내역이 있습니다' : '삭제';
+    b.addEventListener('click', () => {
+      if (used.has(m)) { mgrMsg('"' + m + '" 담당자의 결품 내역이 있어 목록에서 뺄 수 없습니다.', true); return; }
+      mgrCustom = mgrCustom.filter(x => x !== m);
+      saveMgrs(); renderMgrSelect(); renderMgrChips();
+      mgrMsg('"' + m + '" 담당자를 목록에서 뺐습니다.');
+    });
+    c.appendChild(b);
+    box.appendChild(c);
+  });
+  if (!mgrCustom.length) {
+    const t = document.createElement('span');
+    t.className = 'mgr-msg'; t.textContent = '추가한 담당자가 없습니다.';
+    box.appendChild(t);
+  }
+}
+function addMgr() {
+  const inp = $('mgr-new');
+  const name = String(inp.value || '').trim().replace(/\s+/g, ' ');
+  if (!name) { mgrMsg('이름을 입력해 주세요.', true); inp.focus(); return; }
+  if (name === '기타') { mgrMsg('"기타"는 이미 선택지에 있습니다.', true); return; }
+  if (mgrList().includes(name)) { mgrMsg('"' + name + '" 담당자는 이미 목록에 있습니다.', true); return; }
+  mgrCustom.push(name);
+  saveMgrs(); renderMgrSelect(); renderMgrChips();
+  $('f-mgr').value = name;
+  inp.value = ''; inp.focus();
+  mgrMsg('"' + name + '" 담당자를 추가했습니다. 담당자 칸에서 바로 선택됩니다.');
+}
+$('btn-mgr-edit').addEventListener('click', () => {
+  const box = $('mgr-editor');
+  box.hidden = !box.hidden;
+  if (!box.hidden) {
+    renderMgrChips();
+    mgrMsg('기본 담당자는 삭제할 수 없습니다. 추가한 담당자는 이 브라우저에만 저장됩니다.');
+    $('mgr-new').focus();
+  }
+});
+$('btn-mgr-add').addEventListener('click', addMgr);
+$('btn-mgr-close').addEventListener('click', () => { $('mgr-editor').hidden = true; });
+$('mgr-new').addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); addMgr(); } });
+renderMgrSelect();
 const fmtN = v => Math.round(v).toLocaleString('ko-KR');
 const toast = msg => { const t = $('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1800); };
 
@@ -493,7 +613,9 @@ $('btn-cancel').addEventListener('click', clearForm);
 function startEdit(id) {
   const e = data.find(x => x.id === id); if (!e) return;
   editId = id; typeTouched = true;
-  $('f-date').value = e.date; $('f-mgr').value = ['박상영','임준혁','이종원','김한슬'].includes(e.mgr) ? e.mgr : '기타';
+  $('f-date').value = e.date;
+  renderMgrSelect();
+  $('f-mgr').value = mgrList().includes(e.mgr) ? e.mgr : '기타';
   $('f-no').value = e.no || ''; $('f-name').value = e.name;
   $('f-order').value = e.orderQty || ''; $('f-short').value = e.shortQty;
   $('f-type').value = e.type; $('f-reason').value = e.reason;
