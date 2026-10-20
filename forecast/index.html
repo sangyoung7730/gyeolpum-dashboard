@@ -204,15 +204,15 @@ function render() {
       '<td><b>' + fmtN(r.avail) + '</b></td>' +
       '<td>' + (r.short > 0 ? '<b style="color:var(--down)">' + fmtN(r.short) + '</b>' : '-') + '</td>' +
       '<td>' + (r.short > 0 ? (r.rate * 100).toFixed(0) + '%' : '-') + '</td>' +
-      '<td class="l">' + pill + '</td>' +
-      '<td class="dim">' + (r.store || '') + '</td>' +
       '<td class="l" style="font-size:12px;white-space:nowrap">' + ((r.nextIns && r.nextIns.length)
         ? r.nextIns.map(function (x) { return md(x.dt) + ' <span class="dim" style="font-size:11px">(' + fmtN(x.qty) + ')</span>'; }).join('<br>')
         : (r.short > 0 && !r.direct ? '<b style="color:var(--down)">없음</b>' : '<span class="dim">—</span>')) + '</td>' +
+      '<td class="l">' + pill + '</td>' +
+      '<td class="dim">' + (r.store || '') + '</td>' +
       '<td class="l dim" style="font-size:12px">' + memo.join(' · ') + '</td></tr>'; }).join('');
   $('listtbl').innerHTML = '<thead><tr>' + TH('code', '날짜', 'l') + TH('mgr', '담당', 'l') + TH('nm', '생활재', 'l') +
-    TH('order', '주문') + TH('stock', '재고') + TH('oMid', '출고') + TH('inMid', '입고') + TH('avail', '가용') + TH('short', '예상결품') + TH('rate', '결품률') +
-    TH('short', '판정', 'l') + TH('store', '보관') + TH('nextInDt', '다음 입고예정', 'l') + TH('inDeli', '비고', 'l') + '</tr></thead><tbody>' + trs + '</tbody>';
+    TH('order', '주문') + TH('stock', '재고') + TH('oMid', '출고') + TH('inMid', '입고') + TH('avail', '가용') + TH('short', '예상결품') + TH('rate', '결품률') + TH('nextInDt', '다음 입고예정', 'l') +
+    TH('short', '판정', 'l') + TH('store', '보관') + TH('inDeli', '비고', 'l') + '</tr></thead><tbody>' + trs + '</tbody>';
   Array.prototype.forEach.call(document.querySelectorAll('#listtbl th[data-sort]'), function (th) {
     th.onclick = function () { var k = th.dataset.sort; if (sortKey === k) sortDir = -sortDir; else { sortKey = k; sortDir = -1; } render(); }; });
 }
@@ -221,8 +221,8 @@ Array.prototype.forEach.call(document.querySelectorAll('.ctg'), function (b) { b
 ['flt-mgr', 'flt-store', 'flt-cat'].forEach(function (id) { $(id).onchange = render; });
 
 function csvRows() {
-  var head = ['공급일', '담당', '생활재번호', '생활재명', '대분류', '중분류', '주문', '매장', '택배', '재고', '출고', '입고', '가용', '예상결품', '결품률', '보관', '당일입고', '다음입고예정', '재고기준일'];
-  var body = filtered().map(function (r) { return [R.공급일, r.mgr, r.code, r.nm, r.cat, r.sub, r.order, r.maejang, r.tb, r.stock, r.oMid, r.inMid, r.avail, r.short, r.short > 0 ? (r.rate * 100).toFixed(0) + '%' : '', r.store, r.inDeli, (r.nextIns || []).map(function (x) { return x.dt + '(' + x.qty + ')'; }).join(' '), r.stockDt || '']; });
+  var head = ['공급일', '담당', '생활재번호', '생활재명', '대분류', '중분류', '주문', '매장', '택배', '재고', '출고', '입고', '가용', '예상결품', '결품률', '다음입고예정', '보관', '당일입고', '재고기준일'];
+  var body = filtered().map(function (r) { return [R.공급일, r.mgr, r.code, r.nm, r.cat, r.sub, r.order, r.maejang, r.tb, r.stock, r.oMid, r.inMid, r.avail, r.short, r.short > 0 ? (r.rate * 100).toFixed(0) + '%' : '', (r.nextIns || []).map(function (x) { return x.dt + '(' + x.qty + ')'; }).join(' '), r.store, r.inDeli, r.stockDt || '']; });
   return [head].concat(body);
 }
 $('btn-csv').onclick = function () {
