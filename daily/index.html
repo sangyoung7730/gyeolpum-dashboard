@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<title>축수산팀 결품현황 대시보드</title>
+<style>
+  .viz-root {
+    --page:#f9f9f7; --surface-1:#fcfcfb; --ink-1:#0b0b0b; --ink-2:#52514e; --ink-3:#898781;
+    --grid:#e1e0d9; --baseline:#c3c2b7; --border:rgba(11,11,11,0.10);
+    --acc:#2a78d6; --acc2:#1baf7a; --up:#006300; --down:#d03b3b; --chip:#f0efec; --warn:#b26a00;
+  }
+  @media (prefers-color-scheme: dark) { .viz-root {
+    --page:#0d0d0d; --surface-1:#1a1a19; --ink-1:#ffffff; --ink-2:#c3c2b7; --ink-3:#898781;
+    --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.10);
+    --acc:#3987e5; --acc2:#199e70; --up:#0ca30c; --down:#e66767; --chip:#262625; --warn:#e3a44a; } }
+  body{margin:0}
+  .viz-root { font-family:"Segoe UI","Malgun Gothic",system-ui,sans-serif; background:var(--page); color:var(--ink-1);
+    margin:0; padding:24px 20px 48px; line-height:1.5; font-size:14px; }
+  .wrap { max-width:1100px; margin:0 auto; display:flex; flex-direction:column; gap:16px; }
+  .hd { display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:10px; }
+  .hd h1 { font-size:20px; font-weight:700; margin:0; }
+  .hd .sub { color:var(--ink-2); font-size:12.5px; }
+  .btn { font-family:inherit; font-size:12.5px; font-weight:700; padding:7px 14px; border-radius:8px;
+    border:1px solid var(--border); background:var(--surface-1); color:var(--ink-1); cursor:pointer; }
+  .btn:hover { border-color:var(--ink-3); }
+  section.panel { background:var(--surface-1); border:1px solid var(--border); border-radius:10px; padding:16px 18px; }
+  .panel h2 { font-size:14.5px; font-weight:700; margin:0 0 10px; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; }
+  .card { background:var(--surface-1); border:1px solid var(--border); border-radius:10px; padding:12px 14px; }
+  .card .lbl { font-size:10.5px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-3); font-weight:700; display:block; }
+  .card .val { font-size:22px; font-weight:700; }
+  .card .val small { font-size:12px; font-weight:600; color:var(--ink-2); }
+  .card .cmp { font-size:11.5px; color:var(--ink-2); display:block; }
+  .formula { font-size:12.5px; color:var(--ink-2); background:var(--chip); border-radius:8px; padding:9px 12px; }
+  .formula b { color:var(--ink-1); }
+  .filters { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
+  .filters select { font-family:inherit; font-size:12.5px; padding:6px 10px; border-radius:7px;
+    border:1px solid var(--baseline); background:var(--page); color:var(--ink-1); }
+  .filters .count { font-size:12px; color:var(--ink-3); margin-left:auto; }
+  .ctg { font-size:12.5px; font-weight:700; padding:5px 12px; border-radius:16px; cursor:pointer;
+    border:1px solid var(--baseline); background:var(--page); color:var(--ink-3); }
+  .ctg.on { background:var(--acc); border-color:var(--acc); color:#fff; }
+  .two-col { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:820px) { .two-col { grid-template-columns:1fr; } }
+  .chartbox h3 { font-size:12.5px; font-weight:700; margin:0 0 6px; color:var(--ink-2); }
+  .chartbox svg { display:block; width:100%; height:auto; }
+  .tblwrap { overflow-x:auto; max-height:720px; overflow-y:auto; }
+  table { border-collapse:collapse; width:100%; font-size:14px; }
+  th { position:sticky; top:0; background:color-mix(in srgb, var(--acc) 15%, var(--surface-1)); text-align:right; font-size:13px; letter-spacing:.03em;
+    color:var(--ink-1); font-weight:800; padding:8px 7px; border-bottom:2px solid var(--acc); white-space:nowrap; z-index:2; cursor:pointer; user-select:none; }
+  th:hover { background:color-mix(in srgb, var(--acc) 26%, var(--surface-1)); }
+  th .arr { font-size:10px; color:var(--acc); }
+  th.l, td.l { text-align:left; }
+  td { text-align:right; padding:7px 7px; border-bottom:1px solid var(--grid); font-variant-numeric:tabular-nums; white-space:nowrap; line-height:1.4; vertical-align:top; }
+  td.l { white-space:normal; }
+  td.dim { color:var(--ink-2); }
+  tr.today td { background:color-mix(in srgb, var(--down) 6%, var(--surface-1)); }
+  .pill { display:inline-block; padding:1px 8px; border-radius:999px; font-size:11.5px; font-weight:700; background:var(--chip); color:var(--ink-2); }
+  .pill.bad { background:color-mix(in srgb, var(--down) 15%, var(--surface-1)); color:var(--down); }
+  .pill.warn { background:color-mix(in srgb, var(--warn) 15%, var(--surface-1)); color:var(--warn); }
+  .pill.ok { background:color-mix(in srgb, var(--acc2) 15%, var(--surface-1)); color:var(--acc2); }
+  .note { font-size:11.5px; color:var(--ink-3); line-height:1.6; }
+  .sm { font-size:11.5px; color:var(--ink-3); }
+  @media (max-width:600px) { .viz-root { padding:14px 10px 40px; } .hd h1 { font-size:17px; } table { font-size:13px; } td, th { padding:6px 5px; } .card .val { font-size:19px; } }
+</style>
+<div class="viz-root"><div class="wrap">
+  <div class="hd">
+    <div><h1>축수산팀 결품현황 대시보드</h1>
+      <span class="sub">11/4(수) 공급분 · 45주 · 2026-11-04 09:32 조회 · ERP 결품사유조회(배송일 11/4) + WMS 11/3 출고분 · 매일 08:00 자동 갱신</span></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <a class="btn" href="../" style="text-decoration:none;display:inline-block" title="팀 결품보고(입력·분석) 대시보드로">📋 결품보고 대시보드</a>
+      <a class="btn" href="../forecast/" style="text-decoration:none;display:inline-block" title="익일 예상결품 대시보드로">📦 예상결품</a>
+      <button class="btn" id="btn-csv">⬇ CSV</button>
+      <button class="btn" id="btn-tsv">📋 엑셀용 복사</button>
+      <button class="btn" id="btn-json" title="결품보고 대시보드의 [복원]에 넣을 수 있는 JSON">💾 복원용 JSON</button>
+    </div>
+  </div>
+  <div class="cards" id="kpis"></div>
+  <div class="formula" id="formula"></div>
+  <section class="panel" id="fcpanel" style="display:none"><h2>🔭 전일 예보 대조</h2><div id="fcbody" class="note" style="font-size:12.5px;color:var(--ink-2)"></div></section>
+  <section class="panel" id="wmspanel" style="display:none"><h2>⚠ WMS에만 있는 결품 — ERP 결품사유조회 미반영</h2><div class="tblwrap" style="max-height:300px"><table id="wmstbl"></table></div>
+    <p class="note">WMS 출고 진행 현황에는 결품으로 잡혔지만 ERP 결품사유조회(주문 반영분)에는 없는 품목입니다. 품질·검수 단계 결품이나 ERP 반영 지연일 수 있어 담당 확인이 필요합니다.</p></section>
+  <section class="panel">
+    <h2>📊 분석</h2>
+    <div class="filters">
+      <span class="ctg on" data-f="1">오늘</span><span class="ctg" data-f="7">최근 7일</span><span class="ctg" data-f="30">최근 30일</span><span class="ctg" data-f="999">전체 누적</span>
+      <select id="flt-mgr"><option value="">담당자 전체</option></select>
+      <select id="flt-type"><option value="">유형 전체</option></select>
+      <span class="count" id="flt-count"></span>
+    </div>
+    <div class="two-col">
+      <div class="chartbox"><h3>담당자별 결품 건수 · 수량</h3><div id="c-mgr"></div></div>
+      <div class="chartbox"><h3>유형별 결품 건수</h3><div id="c-type"></div></div>
+    </div>
+    <div class="chartbox" style="margin-top:14px"><h3>일자별 결품 품목 수 추이 (최근 30회 보고)</h3><div id="c-hist"></div></div>
+  </section>
+  <section class="panel">
+    <h2>📋 결품 내역 <span class="sm" id="tbl-sub"></span></h2>
+    <div class="tblwrap"><table id="listtbl"></table></div>
+    <p class="note"><b>주문·결품</b> = ERP U_결품사유조회(연합) 배송일 기준 축수산팀 행(결품이 있는 주문만 집계된 화면) · <b>유형</b> = 사유 글귀로 자동분류(결품보고 대시보드와 같은 규칙, 담당 확인 필요) · <b>사유</b> = ERP 결품사유, 비어 있으면 WMS 결품 메모(WMS 표시) · <b>출고처</b> = WMS 출고 진행 현황 11/3 출고분의 차수·출고처별 결품수량 · <b>대책/예정</b>은 결품보고 대시보드에서 담당이 입력합니다(여기엔 자동 보고 시점의 값만). <b>생산지·담당</b>은 생활재 마스터(매일 06:40 갱신) 기준.</p>
+  </section>
+</div></div>
+<script>
+var P = {"R":{"savedAt":"2026-11-04T00:32:43.281Z","기준":"2026-11-04 09:32","공급일":"2026-11-04","주차":45,"출고일":"2026-11-03","source":"ERP U_결품사유조회(연합) 배송일 2026-11-04 축수산팀 + WMS 출고진행현황 2026-11-03 출고분(결품만) — 2026-11-04 09:32 조회. 유형은 사유 기준 자동분류(담당 확인 필요), 입고예정일·대책은 담당 입력 필요","결품품목":3,"결품수량":3,"결품품목주문":19,"담당별":{"임준혁":3},"유형별":{"설비·물류":1,"입고·입수 부족":2},"전팀":{"order":47318,"short":223,"rate":0.47,"orderers":60,"items":21},"ERP데이터없음":false,"WMS":{"출고일":"2026-11-03","결품품목":3,"전체행":120,"오류":"","ERP미반영":[]},"예보대조":{"기준":"2026-11-03 11:54 ERP","예상":7,"적중":0,"예상외":3,"빗나감":7,"예상목록":[{"code":"50397","nm":"(수)남해안 생굴(150g)","short":315,"hit":false},{"code":"50398","nm":"(수)남해안 생굴(500g)","short":70,"hit":false},{"code":"16905","nm":"(수)자연산참바지락(900g)","short":14,"hit":false},{"code":"42177","nm":"(수)싸먹는감태(10장)","short":5,"hit":false},{"code":"7198","nm":"(수)자연산참바지락(350g)","short":3,"hit":false},{"code":"42255","nm":"(수)제주은갈치(400g)","short":2,"hit":false},{"code":"13371","nm":"(수)자연산전복(500g/3~5미)","short":1,"hit":false}]},"deleted":[]},"today":[{"id":"gai-20261104-54908","date":"2026-11-04","week":45,"mgr":"임준혁","no":54908,"name":"(수)냉장 손질갈치(300g/1미/가온)","orderQty":13,"shortQty":1,"pickQty":12,"rate":0.07692307692307693,"type":"설비·물류","reason":"파손","reasonSrc":"WMS","places":"DAS 11차 1곳 오정점(경기두레)1","wmsShort":1,"wmsEnt":"2026-11-03 21:12:39","eta":"","action":"","origin":"(주)가온아이비","part":"수산","forecast":"예보 없음"},{"id":"gai-20261104-54970","date":"2026-11-04","week":45,"mgr":"임준혁","no":54970,"name":"(수)냉장 손질꽁치(280g/원양산)","orderQty":4,"shortQty":1,"pickQty":3,"rate":0.25,"type":"입고·입수 부족","reason":"입수부족","reasonSrc":"WMS","places":"DAS 11차 1곳 죽전점(경기남부두레)1","wmsShort":1,"wmsEnt":"2026-11-03 21:12:39","eta":"","action":"","origin":"(주)가온아이비","part":"수산","forecast":"예보 없음"},{"id":"gai-20261104-59320","date":"2026-11-04","week":45,"mgr":"임준혁","no":59320,"name":"(수)남해안 생물바지락(500g/가온)","orderQty":2,"shortQty":1,"pickQty":1,"rate":0.5,"type":"입고·입수 부족","reason":"입수부족","reasonSrc":"WMS","places":"DAS 11차 1곳 죽전점(경기남부두레)1","wmsShort":1,"wmsEnt":"2026-11-03 21:12:39","eta":"","action":"","origin":"(주)가온아이비","part":"수산","forecast":"예보 없음"}],"hist":[{"공급일":"2026-11-04","주차":45,"기준":"2026-11-04 09:32","결품품목":3,"결품수량":3,"결품품목주문":19,"전팀":{"order":47318,"short":223,"rate":0.47,"orderers":60,"items":21},"담당별":{"임준혁":3},"유형별":{"설비·물류":1,"입고·입수 부족":2},"예보":{"예상":7,"적중":0,"예상외":3},"entries":[{"date":"2026-11-04","week":45,"mgr":"임준혁","no":54908,"name":"(수)냉장 손질갈치(300g/1미/가온)","orderQty":13,"shortQty":1,"type":"설비·물류","reason":"파손","places":"DAS 11차 1곳 오정점(경기두레)1","origin":"(주)가온아이비","forecast":"예보 없음"},{"date":"2026-11-04","week":45,"mgr":"임준혁","no":54970,"name":"(수)냉장 손질꽁치(280g/원양산)","orderQty":4,"shortQty":1,"type":"입고·입수 부족","reason":"입수부족","places":"DAS 11차 1곳 죽전점(경기남부두레)1","origin":"(주)가온아이비","forecast":"예보 없음"},{"date":"2026-11-04","week":45,"mgr":"임준혁","no":59320,"name":"(수)남해안 생물바지락(500g/가온)","orderQty":2,"shortQty":1,"type":"입고·입수 부족","reason":"입수부족","places":"DAS 11차 1곳 죽전점(경기남부두레)1","origin":"(주)가온아이비","forecast":"예보 없음"}]}],"restore":{"savedAt":"2026-11-04T00:32:43.281Z","source":"ERP U_결품사유조회(연합) 배송일 2026-11-04 축수산팀 + WMS 출고진행현황 2026-11-03 출고분(결품만) — 2026-11-04 09:32 조회. 유형은 사유 기준 자동분류(담당 확인 필요), 입고예정일·대책은 담당 입력 필요","entries":[{"id":"gai-20261104-54908","date":"2026-11-04","week":45,"mgr":"임준혁","no":54908,"name":"(수)냉장 손질갈치(300g/1미/가온)","orderQty":13,"shortQty":1,"pickQty":12,"rate":0.07692307692307693,"type":"설비·물류","reason":"파손","reasonSrc":"WMS","places":"DAS 11차 1곳 오정점(경기두레)1","wmsShort":1,"wmsEnt":"2026-11-03 21:12:39","eta":"","action":"","origin":"(주)가온아이비","part":"수산","forecast":"예보 없음"},{"id":"gai-20261104-54970","date":"2026-11-04","week":45,"mgr":"임준혁","no":54970,"name":"(수)냉장 손질꽁치(280g/원양산)","orderQty":4,"shortQty":1,"pickQty":3,"rate":0.25,"type":"입고·입수 부족","reason":"입수부족","reasonSrc":"WMS","places":"DAS 11차 1곳 죽전점(경기남부두레)1","wmsShort":1,"wmsEnt":"2026-11-03 21:12:39","eta":"","action":"","origin":"(주)가온아이비","part":"수산","forecast":"예보 없음"},{"id":"gai-20261104-59320","date":"2026-11-04","week":45,"mgr":"임준혁","no":59320,"name":"(수)남해안 생물바지락(500g/가온)","orderQty":2,"shortQty":1,"pickQty":1,"rate":0.5,"type":"입고·입수 부족","reason":"입수부족","reasonSrc":"WMS","places":"DAS 11차 1곳 죽전점(경기남부두레)1","wmsShort":1,"wmsEnt":"2026-11-03 21:12:39","eta":"","action":"","origin":"(주)가온아이비","part":"수산","forecast":"예보 없음"}],"deleted":[]}};
+var R = P.R, TODAY = P.today, hist = P.hist, RESTORE = P.restore;
+var $ = function (id) { return document.getElementById(id); };
+var fmtN = function (n) { return (+n || 0).toLocaleString('ko-KR'); };
+var md = function (s) { return (+s.slice(5, 7)) + '/' + (+s.slice(8, 10)); };
+var pct = function (a, b) { return b ? (a / b * 100).toFixed(1) + '%' : '-'; };
+var esc = function (s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
+var days = 1, sortKey = 'shortQty', sortDir = -1;
+var sum = function (a, k) { return a.reduce(function (p, x) { return p + (x[k] || 0); }, 0); };
+/* 누적 행: history의 entries를 날짜 내림차순으로 펼친다 (오늘은 TODAY 그대로) */
+function pool() {
+  var cut = days >= 999 ? '0000-00-00' : (function () { var d = new Date(R.공급일 + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() - (days - 1)); return d.toISOString().slice(0, 10); })();
+  var rows = [];
+  hist.forEach(function (hd) { if (hd.공급일 < cut || hd.공급일 > R.공급일) return; (hd.공급일 === R.공급일 ? TODAY : hd.entries).forEach(function (e) { rows.push(e); }); });
+  if (!hist.some(function (hd) { return hd.공급일 === R.공급일; })) TODAY.forEach(function (e) { rows.push(e); });
+  return rows;
+}
+
+/* KPI */
+var prev = (function () { var p = hist.filter(function (x) { return x.공급일 < R.공급일; }); return p.length ? p[p.length - 1] : null; })();
+var T = R.전팀 || {}, FC = R.예보대조;
+var wk = hist.filter(function (x) { return x.주차 === R.주차; });
+$('kpis').innerHTML = [
+  { l: md(R.공급일) + ' 공급 결품', v: '<span style="color:var(--down)">' + fmtN(R.결품품목) + '</span><small> 품목</small>', c: '결품수량 ' + fmtN(R.결품수량) + '개' + (prev ? ' · 전 보고(' + md(prev.공급일) + ') ' + prev.결품품목 + '품목 ' + fmtN(prev.결품수량) + '개' : '') },
+  { l: '결품 품목 주문 대비', v: pct(R.결품수량, R.결품품목주문) + '', c: '결품 품목 주문 ' + fmtN(R.결품품목주문) + '개 중 ' + fmtN(R.결품수량) + '개 결품' },
+  { l: '전팀 결품률 (ERP 하단 합계)', v: (T.rate != null ? T.rate + '%' : '-'), c: T.order ? '전팀 결품 ' + (T.items || '-') + '품목 ' + fmtN(T.short) + '개 / 총주문 ' + fmtN(T.order) + '개 · 결품 주문자 ' + (T.orderers || '-') : '합계 행 없음' },
+  { l: R.주차 + '주 누적 (월~일)', v: fmtN(sum(wk, '결품품목')) + '<small> 품목</small>', c: wk.length + '일 보고 · 결품수량 ' + fmtN(sum(wk, '결품수량')) + '개' },
+  { l: '전일 예보 대조', v: FC ? fmtN(FC.적중) + '<small> / ' + FC.예상 + ' 적중</small>' : '-', c: FC ? '예상 못한 결품 ' + FC.예상외 + ' · 예상했으나 결품 안 남 ' + FC.빗나감 : '예보 파일 없음' },
+].map(function (k) { return '<div class="card"><span class="lbl">' + k.l + '</span><span class="val">' + k.v + '</span><span class="cmp">' + k.c + '</span></div>'; }).join('');
+$('formula').innerHTML = '<b>자료</b> ' + esc(R.source) + (R.WMS && R.WMS.오류 ? ' · <b style="color:var(--down)">WMS 조회 실패:</b> ' + esc(R.WMS.오류) : '');
+if (FC) { $('fcpanel').style.display = ''; $('fcbody').innerHTML = '전일 ' + esc(FC.기준) + ' 예보: 결품 예상 ' + FC.예상 + '품목 → ' + (FC.예상목록.length ? FC.예상목록.map(function (x) { return (x.hit ? '<span class="pill bad">적중</span> ' : '<span class="pill ok">결품 안 남</span> ') + x.code + ' ' + esc(x.nm) + ' <span class="sm">(예상 부족 ' + fmtN(x.short) + ')</span>'; }).join('<br>') : '없음') + (FC.예상외 ? '<br><span class="pill warn">예상 밖</span> ' + TODAY.filter(function (e) { return e.forecast !== '예보 적중'; }).map(function (e) { return e.no + ' ' + esc(e.name); }).join(' · ') : ''); }
+if (R.WMS && R.WMS.ERP미반영 && R.WMS.ERP미반영.length) {
+  $('wmspanel').style.display = '';
+  $('wmstbl').innerHTML = '<thead><tr><th class="l">번호</th><th class="l">생활재</th><th class="l">담당</th><th>예정</th><th>결품</th><th class="l">WMS 메모</th><th class="l">출고처</th></tr></thead><tbody>' + R.WMS.ERP미반영.map(function (w) { return '<tr><td class="l">' + w.code + '</td><td class="l">' + esc(w.nm) + '</td><td class="l">' + esc(w.mgr) + '</td><td>' + fmtN(w.qty) + '</td><td><b style="color:var(--down)">' + fmtN(w.short) + '</b></td><td class="l">' + esc(w.memo) + '</td><td class="l sm">' + esc(w.places) + '</td></tr>'; }).join('') + '</tbody>';
+}
+/* 필터 옵션 */
+var allRows = (function () { var s = days; days = 999; var r = pool(); days = s; return r; })();
+var opt = function (id, vals) { var s = $(id); vals.forEach(function (v) { var o = document.createElement('option'); o.value = v; o.textContent = v; s.appendChild(o); }); };
+opt('flt-mgr', Array.from(new Set(allRows.map(function (r) { return r.mgr || '미지정'; }))).sort());
+opt('flt-type', Array.from(new Set(allRows.map(function (r) { return r.type || '미분류'; }))).sort());
+function filtered() { var m = $('flt-mgr').value, t = $('flt-type').value; return pool().filter(function (r) { if (m && (r.mgr || '미지정') !== m) return false; if (t && (r.type || '미분류') !== t) return false; return true; }); }
+
+/* 차트 */
+function hbar(id, data, o) {
+  o = o || {}; var W = 520, rowH = 22, L = 120, H = Math.max(40, data.length * rowH + 8);
+  var mx = Math.max.apply(null, data.map(function (d) { return d.v; }).concat([1]));
+  var g = data.map(function (d, i) { var y = 4 + i * rowH, w = (W - L - 60) * d.v / mx;
+    return '<text x="' + (L - 6) + '" y="' + (y + 15) + '" text-anchor="end" font-size="12" fill="currentColor">' + esc(d.label) + '</text>' +
+      '<rect x="' + L + '" y="' + y + '" width="' + Math.max(w, 1).toFixed(1) + '" height="' + (rowH - 6) + '" rx="3" fill="' + (o.color || 'var(--acc)') + '"><title>' + (o.tip ? o.tip(d) : d.v) + '</title></rect>' +
+      '<text x="' + (L + w + 6).toFixed(1) + '" y="' + (y + 15) + '" font-size="12" fill="currentColor">' + (o.vfmt ? o.vfmt(d) : d.v) + '</text>'; }).join('');
+  $(id).innerHTML = data.length ? '<svg viewBox="0 0 ' + W + ' ' + H + '" style="color:var(--ink-1)">' + g + '</svg>' : '<p class="note">해당 없음</p>';
+}
+function vbar(id, labels, vals, o) {
+  o = o || {}; var W = 1040, H = 170, L = 36, B = 26, n = Math.max(labels.length, 1), iw = W - L - 10, ih = H - B - 14;
+  var mx = Math.max.apply(null, vals.concat([1])), bw = Math.min(40, iw / n * .6), g = '';
+  for (var k = 0; k <= 3; k++) { var v = mx * k / 3, yy = 10 + ih - ih * v / mx; g += '<line x1="' + L + '" y1="' + yy + '" x2="' + (W - 10) + '" y2="' + yy + '" stroke="var(--grid)"/><text x="' + (L - 5) + '" y="' + (yy + 4) + '" text-anchor="end" font-size="10" fill="var(--ink-3)">' + Math.round(v) + '</text>'; }
+  vals.forEach(function (v, i) { var x = L + iw * (i + .5) / n - bw / 2, hh = ih * v / mx;
+    g += '<rect x="' + x.toFixed(1) + '" y="' + (10 + ih - hh).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + hh.toFixed(1) + '" rx="3" fill="' + (v > 0 ? 'var(--down)' : 'var(--acc2)') + '"><title>' + (o.tip ? o.tip(i) : v) + '</title></rect>';
+    g += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (10 + ih - hh - 4).toFixed(1) + '" text-anchor="middle" font-size="11" font-weight="700" fill="currentColor">' + v + '</text>';
+    g += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="11" fill="var(--ink-2)">' + labels[i] + '</text>'; });
+  $(id).innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="color:var(--ink-1)">' + g + '</svg>';
+}
+function render() {
+  var f = filtered();
+  $('flt-count').textContent = f.length + '건 표시' + (days >= 999 ? ' (누적 ' + hist.length + '일)' : days > 1 ? ' (최근 ' + days + '일)' : '');
+  $('tbl-sub').textContent = days === 1 ? md(R.공급일) + ' 공급분 ' + f.length + '건' : f.length + '건 · ' + fmtN(sum(f, 'shortQty')) + '개';
+  var agg = function (key, dflt) { var a = {}; f.forEach(function (r) { var k = r[key] || dflt; a[k] = a[k] || { v: 0, q: 0 }; a[k].v++; a[k].q += r.shortQty; });
+    return Object.keys(a).map(function (k) { return { label: k, v: a[k].v, q: a[k].q }; }).sort(function (x, y) { return y.v - x.v; }); };
+  hbar('c-mgr', agg('mgr', '미지정'), { vfmt: function (r) { return r.v + '건 · ' + fmtN(r.q) + '개'; }, tip: function (r) { return r.v + '건 · 결품 ' + fmtN(r.q) + '개'; } });
+  hbar('c-type', agg('type', '미분류'), { color: 'var(--acc2)', vfmt: function (r) { return r.v + '건'; }, tip: function (r) { return r.v + '건 · 결품 ' + fmtN(r.q) + '개'; } });
+  var hh = hist.slice(-30);
+  vbar('c-hist', hh.map(function (x) { return md(x.공급일); }), hh.map(function (x) { return x.결품품목; }), { tip: function (i) { return hh[i].공급일 + ' · ' + hh[i].결품품목 + '품목 · ' + fmtN(hh[i].결품수량) + '개 (' + hh[i].기준 + ')'; } });
+  var sorted = f.slice().sort(function (a, b) { var x = a[sortKey], y = b[sortKey]; if (sortKey === 'rate') { x = a.orderQty ? a.shortQty / a.orderQty : 0; y = b.orderQty ? b.shortQty / b.orderQty : 0; } if (typeof x === 'string') return sortDir * x.localeCompare(y, 'ko'); return sortDir * ((x || 0) - (y || 0)); });
+  var arrow = function (k) { return sortKey === k ? '<span class="arr">' + (sortDir > 0 ? '▲' : '▼') + '</span>' : ''; };
+  var TH = function (k, label, cls) { return '<th' + (cls ? ' class="' + cls + '"' : '') + ' data-sort="' + k + '" title="클릭하여 정렬">' + label + ' ' + arrow(k) + '</th>'; };
+  var trs = sorted.map(function (e) {
+    return '<tr class="' + (e.date === R.공급일 ? 'today' : '') + '">' +
+      '<td class="l dim">' + md(e.date) + '<br><span class="sm">' + e.week + '주</span></td>' +
+      '<td class="l dim">' + esc(e.mgr || '-') + '</td>' +
+      '<td class="l"><b>' + esc(e.name) + '</b> <span class="sm">' + e.no + '</span></td>' +
+      '<td>' + fmtN(e.orderQty) + '</td><td><b style="color:var(--down)">' + fmtN(e.shortQty) + '</b>' + (e.wmsShort != null && e.wmsShort !== e.shortQty ? '<br><span class="sm">WMS ' + fmtN(e.wmsShort) + '</span>' : '') + '</td>' +
+      '<td>' + pct(e.shortQty, e.orderQty) + '</td>' +
+      '<td class="l">' + (e.type ? '<span class="pill">' + esc(e.type) + '</span> ' : '') + (e.reason ? esc(e.reason) + (e.reasonSrc === 'WMS' ? ' <span class="sm">(WMS)</span>' : '') : '<span class="sm">사유 미입력</span>') + (e.forecast === '예보 적중' ? '<br><span class="pill warn">전일 예보 적중</span>' : '') + '</td>' +
+      '<td class="l sm" style="max-width:260px">' + esc(e.places || '') + '</td>' +
+      '<td class="l dim">' + esc(e.action || e.eta || '') + '</td>' +
+      '<td class="l dim sm">' + esc(e.origin || '') + '</td></tr>'; }).join('');
+  $('listtbl').innerHTML = '<thead><tr>' + TH('date', '날짜', 'l') + TH('mgr', '담당', 'l') + TH('name', '생활재', 'l') + TH('orderQty', '주문') + TH('shortQty', '결품') + TH('rate', '결품률') + TH('type', '유형 · 사유', 'l') + TH('places', '출고처(WMS)', 'l') + TH('action', '대책/예정', 'l') + TH('origin', '생산지', 'l') + '</tr></thead><tbody>' + (trs || '<tr><td colspan="10" class="l dim" style="padding:18px">결품이 없습니다 👍</td></tr>') + '</tbody>';
+  Array.prototype.forEach.call(document.querySelectorAll('#listtbl th[data-sort]'), function (th) { th.onclick = function () { var k = th.dataset.sort; if (sortKey === k) sortDir = -sortDir; else { sortKey = k; sortDir = -1; } render(); }; });
+}
+Array.prototype.forEach.call(document.querySelectorAll('.ctg'), function (b) { b.onclick = function () { Array.prototype.forEach.call(document.querySelectorAll('.ctg'), function (x) { x.classList.remove('on'); }); b.classList.add('on'); days = +b.dataset.f; render(); }; });
+['flt-mgr', 'flt-type'].forEach(function (id) { $(id).onchange = render; });
+
+/* 내보내기 — 결품보고 대시보드와 같은 CSV 열 · 엑셀 양식 TSV 열 순서 */
+function csvRows() {
+  var head = ['날짜', '주차', '담당자', '생활재번호', '생활재명', '총주문수량', '결품수량', '결품률', '결품유형', '결품사유', '입고예정일', '결품대책', '생산지', '출고처(WMS)'];
+  return [head].concat(filtered().map(function (e) { return [e.date, e.week, e.mgr, e.no, e.name, e.orderQty, e.shortQty, e.orderQty ? (e.shortQty / e.orderQty).toFixed(4) : '', e.type, e.reason, e.eta || '', e.action || '', e.origin, e.places || '']; }));
+}
+function dl(name, content, type) { var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([content], { type: type })); a.download = name; document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 300); }
+$('btn-csv').onclick = function () { dl('결품현황_' + R.공급일 + '.csv', '\ufeff' + csvRows().map(function (r) { return r.map(function (v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; }).join(','); }).join('\n'), 'text/csv;charset=utf-8'); };
+$('btn-tsv').onclick = function () {
+  // 기존 엑셀 양식 열 순서: 날짜 담당자 번호 품명 총주문 (온라인) (매장) (합계) 결품수량 (분류) 사유 예정일 (추가예정) 대책 (재고유형) (결품유형) 생산지
+  var tsv = filtered().slice().sort(function (a, b) { return a.date.localeCompare(b.date); }).map(function (e) { var m = e.date.slice(5).split('-'); return [(+m[0]) + '/' + (+m[1]), e.mgr, e.no, e.name, e.orderQty, '', '', '', e.shortQty, '', e.reason, e.eta || '', '', e.action || '', '', e.type, e.origin].join('\t'); }).join('\n');
+  (navigator.clipboard ? navigator.clipboard.writeText(tsv) : Promise.reject()).then(function () { $('btn-tsv').textContent = '✓ 복사됨'; setTimeout(function () { $('btn-tsv').textContent = '📋 엑셀용 복사'; }, 1500); }).catch(function () { prompt('복사해서 엑셀 양식의 날짜 열에 붙여 넣으세요', tsv); }); };
+$('btn-json').onclick = function () { dl('결품현황_' + R.공급일 + '.json', JSON.stringify(RESTORE, null, 1), 'application/json'); };
+render();
+</script>
+
+</body>
+</html>
