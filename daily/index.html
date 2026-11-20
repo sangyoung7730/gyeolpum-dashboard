@@ -64,6 +64,12 @@
   .pill.ok { background:color-mix(in srgb, var(--acc2) 15%, var(--surface-1)); color:var(--acc2); }
   .note { font-size:11.5px; color:var(--ink-3); line-height:1.6; }
   .sm { font-size:11.5px; color:var(--ink-3); }
+  .btn.xs { font-size:11.5px; padding:3px 8px; border-radius:6px; }
+  .share-banner { display:flex; align-items:center; gap:12px; flex-wrap:wrap; background:color-mix(in srgb, var(--acc) 10%, var(--surface-1)); border:1px solid var(--acc); border-radius:10px; padding:10px 14px; font-size:13px; }
+  #share-status { font-size:12px; font-weight:600; }
+  #listtbl input, #listtbl select { font-family:inherit; font-size:12.5px; padding:4px 6px; border-radius:6px; border:1px solid var(--baseline); background:var(--page); color:var(--ink-1); max-width:100%; }
+  tr.editing td { background:color-mix(in srgb, var(--warn) 10%, var(--surface-1)); white-space:normal; }
+  #toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:var(--ink-1); color:var(--page); padding:9px 18px; border-radius:20px; font-size:12.5px; opacity:0; transition:opacity .2s; pointer-events:none; z-index:50; }
   @media (max-width:600px) { .viz-root { padding:14px 10px 40px; } .hd h1 { font-size:17px; } table { font-size:13px; } td, th { padding:6px 5px; } .card .val { font-size:19px; } }
 </style>
 <div class="viz-root"><div class="wrap">
@@ -76,8 +82,11 @@
       <button class="btn" id="btn-csv">⬇ CSV</button>
       <button class="btn" id="btn-tsv">📋 엑셀용 복사</button>
       <button class="btn" id="btn-json" title="결품보고 대시보드의 [복원]에 넣을 수 있는 JSON">💾 복원용 JSON</button>
+      <button class="btn" id="btn-share" title="편집 내용을 팀 공유파일(Z: 결품보고_공유데이터.json)에 저장">📡 공유 연결</button>
     </div>
   </div>
+  <div id="share-status" class="sub"></div>
+  <div class="share-banner" id="share-banner" style="display:none"></div>
   <div class="cards" id="kpis"></div>
   <div class="formula" id="formula"></div>
   <section class="panel" id="fcpanel" style="display:none"><h2>🔭 전일 예보 대조</h2><div id="fcbody" class="note" style="font-size:12.5px;color:var(--ink-2)"></div></section>
@@ -100,9 +109,130 @@
   <section class="panel">
     <h2>📋 결품 내역 <span class="sm" id="tbl-sub"></span></h2>
     <div class="tblwrap"><table id="listtbl"></table></div>
-    <p class="note"><b>주문·결품</b> = ERP U_결품사유조회(연합) 배송일 기준 축수산팀 행(결품이 있는 주문만 집계된 화면) · <b>유형</b> = 사유 글귀로 자동분류(결품보고 대시보드와 같은 규칙, 담당 확인 필요) · <b>사유</b> = ERP 결품사유, 비어 있으면 WMS 결품 메모(WMS 표시) · <b>출고처</b> = WMS 출고 진행 현황 11/19 출고분의 차수·출고처별 결품수량 · <b>대책/예정</b>은 결품보고 대시보드에서 담당이 입력합니다(여기엔 자동 보고 시점의 값만). <b>생산지·담당</b>은 생활재 마스터(매일 06:40 갱신) 기준.</p>
+    <p class="note"><b>주문·결품</b> = ERP U_결품사유조회(연합) 배송일 기준 축수산팀 행(결품이 있는 주문만 집계된 화면) · <b>유형</b> = 사유 글귀로 자동분류(결품보고 대시보드와 같은 규칙, 담당 확인 필요) · <b>편집</b> = ✏️로 담당·유형·사유·입고예정일·대책을 고치면 팀 공유파일(결품보고 대시보드와 같은 파일)에 저장되고 「팀 입력」으로 표시 · <b>사유</b> = ERP 결품사유, 비어 있으면 WMS 결품 메모(WMS 표시) · <b>출고처</b> = WMS 출고 진행 현황 11/19 출고분의 차수·출고처별 결품수량 · <b>대책/예정</b>은 결품보고 대시보드에서 담당이 입력합니다(여기엔 자동 보고 시점의 값만). <b>생산지·담당</b>은 생활재 마스터(매일 06:40 갱신) 기준.</p>
   </section>
 </div></div>
+<div id="toast"></div>
+<script>
+var $ = function (id) { return document.getElementById(id); };
+/* 결품현황 대시보드 — 행 편집(담당·유형·사유·입고예정일·대책) + 팀 공유 (2026-11-20 팀장 지시)
+   · 편집 내용은 결품보고 대시보드와 같은 공유파일(Z: 결품보고_공유데이터.json)에 저장된다 → 두 대시보드가 같은 사유·대책을 보여 준다.
+   · 공유 연결(File System Access API, PC Edge/Chrome)은 결품보고 대시보드와 같은 저장소(IndexedDB gyeolpum_share)를 쓰므로
+     웹 주소에서는 한쪽에서 연결해 두면 다른 쪽도 허용만으로 이어진다. 연결이 없으면 웹 사본(data/share.json)을 읽어 팀 입력을 보여 주고, 편집은 브라우저에 보관한다.
+   · 이 파일은 gyeolpum_daily_html.js가 <script>로 끼워 넣는다 — 템플릿 리터럴이 아니므로 백슬래시를 그대로 쓴다. */
+var TYPES = ['발주관리', '재고관리', '입고·입수 부족', '생산·산지', '설비·물류', '품질', '설정·운영', '기타'];
+var MGRS = ['박상영', '임준혁', '이종원', '김한슬', '안민우'];
+var SHARE_URL = 'https://sangyoung7730.github.io/gyeolpum-dashboard/data/share.json';
+var EDIT_FIELDS = ['mgr', 'type', 'reason', 'eta', 'action'];
+var keyOf = function (e) { return e.date + '|' + (+e.no); };
+var SHARED = {};                       // 공유파일(또는 웹 사본)의 팀 입력: key → entry
+var PENDING = {};                      // 아직 공유파일에 못 쓴 내 편집: key → {fields..., updatedAt}
+var PKEY = 'gyeolpum_daily_pending_v1';
+try { PENDING = JSON.parse(localStorage.getItem(PKEY) || '{}') || {}; } catch (e) { PENDING = {}; }
+function savePending() { try { localStorage.setItem(PKEY, JSON.stringify(PENDING)); } catch (e) {} }
+var shareHandle = null, shareState = '미연결', sharedAt = null, retryT = null, retryN = 0;
+
+/* 표시용: 자동 수집값 위에 팀 입력(공유) → 내 미전송 편집 순으로 덮는다 */
+function ov(e) {
+  var k = keyOf(e), s = SHARED[k], p = PENDING[k]; if (!s && !p) return e;
+  var o = {}; for (var f in e) o[f] = e[f];
+  if (s) { EDIT_FIELDS.forEach(function (f) { if (s[f] !== undefined && s[f] !== '') o[f] = s[f]; }); if (s.reason && s.reason !== e.reason) o.reasonSrc = '팀'; o.teamId = s.id; }
+  if (p) { EDIT_FIELDS.forEach(function (f) { if (p[f] !== undefined) o[f] = p[f]; }); o.pending = true; if (p.reason !== undefined && p.reason !== e.reason) o.reasonSrc = '팀'; }
+  return o;
+}
+function setShareStatus(txt, ok) { var el = $('share-status'); if (!el) return; el.textContent = txt; el.style.color = ok ? 'var(--acc2)' : 'var(--warn)'; }
+function pendingCount() { return Object.keys(PENDING).length; }
+function refreshStatus() {
+  var n = pendingCount();
+  if (shareHandle && shareState === '연결') setShareStatus('📡 공유 연결됨 · 팀 입력 ' + Object.keys(SHARED).length + '건' + (n ? ' · 미전송 ' + n + '건(자동 재전송)' : ''), true);
+  else if (sharedAt) setShareStatus('🌐 웹 사본 기준(팀 입력 ' + fmtWhen(sharedAt) + ' 저장분)' + (n ? ' · 내 편집 ' + n + '건은 브라우저에만 있음 — [📡 공유 연결] 후 자동 전송' : ''), !n);
+  else setShareStatus('공유 미연결' + (n ? ' · 내 편집 ' + n + '건 브라우저 보관 중' : ''), false);
+}
+function fmtWhen(iso) { try { return new Date(iso).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }); } catch (e) { return ''; } }
+function indexShared(obj) { SHARED = {}; (obj && obj.entries || []).forEach(function (e) { if (e && e.date && e.no != null) { var k = keyOf(e), cur = SHARED[k]; if (!cur || String(e.updatedAt || '') >= String(cur.updatedAt || '')) SHARED[k] = e; } }); sharedAt = obj && obj.savedAt || null; }
+
+/* ── 공유파일(File System Access) ── */
+function idbOpen() { return new Promise(function (res) { try { var rq = indexedDB.open('gyeolpum_share', 1); rq.onupgradeneeded = function () { rq.result.createObjectStore('kv'); }; rq.onsuccess = function () { res(rq.result); }; rq.onerror = function () { res(null); }; } catch (e) { res(null); } }); }
+function idbGet(key) { return idbOpen().then(function (db) { if (!db) return null; return new Promise(function (res) { var tx = db.transaction('kv', 'readonly'); var rq = tx.objectStore('kv').get(key); rq.onsuccess = function () { res(rq.result); }; rq.onerror = function () { res(null); }; }); }); }
+function idbPut(key, val) { return idbOpen().then(function (db) { if (!db) return; return new Promise(function (res) { var tx = db.transaction('kv', 'readwrite'); tx.objectStore('kv').put(val, key); tx.oncomplete = function () { res(); }; tx.onerror = function () { res(); }; }); }); }
+function ensurePermission(interactive) { if (!shareHandle) return Promise.resolve(false); return shareHandle.queryPermission({ mode: 'readwrite' }).then(function (p) { if (p === 'granted') return true; if (!interactive) return false; return shareHandle.requestPermission({ mode: 'readwrite' }).then(function (q) { return q === 'granted'; }); }).catch(function () { return false; }); }
+function readShared() { return shareHandle.getFile().then(function (f) { return f.text(); }).then(function (t) { var o = JSON.parse(t || '{}'); if (!o.entries) o.entries = []; if (!o.deleted) o.deleted = []; return o; }); }
+/* 내 편집을 원격 데이터에 반영 — 같은 날짜·생활재번호가 있으면 그 건을 고치고(최근 수정 우선), 없으면 새 건으로 추가 */
+function applyPending(remote, pending, todayRows) {
+  var byKey = {}; remote.entries.forEach(function (e, i) { if (e && e.date && e.no != null) byKey[keyOf(e)] = i; });
+  var changed = 0;
+  Object.keys(pending).forEach(function (k) {
+    var p = pending[k], i = byKey[k];
+    if (i != null) { var cur = remote.entries[i]; if (String(cur.updatedAt || '') > String(p.updatedAt || '')) return; EDIT_FIELDS.forEach(function (f) { if (p[f] !== undefined) cur[f] = p[f]; }); cur.updatedAt = p.updatedAt; changed++; return; }
+    var base = (todayRows || []).filter(function (e) { return keyOf(e) === k; })[0] || {}; var d = k.split('|');
+    var n = { id: base.id || ('gai-' + d[0].replace(/-/g, '') + '-' + d[1]), date: d[0], week: base.week || '', mgr: base.mgr || '', no: +d[1], name: base.name || '', orderQty: base.orderQty || 0, shortQty: base.shortQty || 0, type: base.type || '', reason: base.reason || '', eta: '', action: '', origin: base.origin || '', updatedAt: p.updatedAt };
+    EDIT_FIELDS.forEach(function (f) { if (p[f] !== undefined) n[f] = p[f]; });
+    remote.entries.push(n); changed++;
+  });
+  return changed;
+}
+function syncShared(isRetry) {
+  if (!shareHandle) return Promise.resolve(false);
+  return ensurePermission(false).then(function (ok) {
+    if (!ok) { shareState = '허용 필요'; showBanner('📡 공유파일 접근을 다시 허용해 주세요 (브라우저를 새로 열면 매번 필요). 허용하면 미전송 편집도 자동 전송됩니다.', '허용하고 재연결', connectShare); refreshStatus(); return false; }
+    return readShared().then(function (remote) {
+      var n = applyPending(remote, PENDING, allRowsRaw());
+      if (!n) { indexShared(remote); shareState = '연결'; hideBanner(); refreshStatus(); render(); return true; }
+      remote.savedAt = new Date().toISOString();
+      return shareHandle.createWritable().then(function (w) { return w.write(JSON.stringify(remote)).then(function () { return w.close(); }); })
+        .then(function () { PENDING = {}; savePending(); retryN = 0; indexShared(remote); shareState = '연결'; hideBanner(); refreshStatus(); render(); toast('공유 저장 완료 — 결품보고 대시보드에도 반영됩니다'); return true; });
+    });
+  }).catch(function (e) {
+    retryN++; shareState = '오류'; setShareStatus('공유 저장 실패(' + (e && e.message || e) + ') — 편집은 브라우저에 보관, ' + (retryN < 40 ? '30초 뒤 재시도' : '재시도 중단 · [📡 공유 연결] 다시 누르기'), false);
+    clearTimeout(retryT); if (retryN < 40) retryT = setTimeout(function () { syncShared(true); }, 30000); return false;
+  });
+}
+function pickShare() {
+  if (!window.showOpenFilePicker) { toast('이 브라우저(휴대폰 등)는 공유 저장을 지원하지 않습니다 — PC의 Edge/Chrome에서 열어 주세요. 편집은 이 브라우저에 보관됩니다.'); return Promise.resolve(); }
+  return window.showOpenFilePicker({ types: [{ description: '결품 공유데이터', accept: { 'application/json': ['.json'] } }] }).then(function (hs) { shareHandle = hs[0]; return idbPut('handle', shareHandle); }).then(function () { return ensurePermission(true); }).then(function (ok) { if (!ok) { setShareStatus('공유파일 권한이 거부되었습니다', false); return; } return syncShared(); }).catch(function (e) { if (e && e.name !== 'AbortError') setShareStatus('공유 연결 실패: ' + (e.message || e), false); });
+}
+function connectShare() { if (shareHandle) return ensurePermission(true).then(function (ok) { if (ok) return syncShared(); return pickShare(); }); return pickShare(); }
+function loadWebCopy() { return fetch(SHARE_URL + '?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (o) { indexShared(o); refreshStatus(); render(); return true; }).catch(function () { refreshStatus(); return false; }); }
+function showBanner(msg, btnLabel, action) { var b = $('share-banner'); if (!b) return; b.innerHTML = '<span>' + msg + '</span>'; var btn = document.createElement('button'); btn.className = 'btn'; btn.textContent = btnLabel; btn.onclick = action; b.appendChild(btn); b.style.display = 'flex'; }
+function hideBanner() { var b = $('share-banner'); if (b) b.style.display = 'none'; }
+function toast(m) { var t = $('toast'); if (!t) return; t.textContent = m; t.style.opacity = '1'; clearTimeout(t._h); t._h = setTimeout(function () { t.style.opacity = '0'; }, 2600); }
+function allRowsRaw() { var s = days; days = 999; var r = pool(); days = s; return r; }
+
+/* ── 행 편집 UI ── */
+var editingKey = null;
+function startEdit(k) { editingKey = k; render(); var el = document.querySelector('#listtbl [data-ek="' + k + '"] input, #listtbl [data-ek="' + k + '"] select'); if (el) el.focus(); }
+function cancelEdit() { editingKey = null; render(); }
+function saveEdit(k) {
+  var tr = document.querySelector('#listtbl tr[data-ek="' + k + '"]'); if (!tr) return;
+  var val = function (f) { var el = tr.querySelector('[data-f="' + f + '"]'); return el ? el.value.trim() : undefined; };
+  var p = { updatedAt: new Date().toISOString() }; EDIT_FIELDS.forEach(function (f) { var v = val(f); if (v !== undefined) p[f] = v; });
+  if (p.reason && !p.type) p.type = classifyClient(p.reason);
+  PENDING[k] = p; savePending(); editingKey = null; render();
+  if (shareHandle) { syncShared(); } else { refreshStatus(); toast(window.showOpenFilePicker ? '브라우저에 저장됨 — 팀과 공유하려면 [📡 공유 연결]' : '브라우저에 저장됨 (휴대폰은 팀 공유 불가)'); }
+}
+function classifyClient(r) { r = String(r || ''); if (!r.trim()) return ''; if (/발주/.test(r)) return '발주관리'; if (/재고관리|재고 관리|재고부족|재고 부족|스탑재고|전산재고|실재고/.test(r)) return '재고관리'; if (/입수|입고수량|입고 수량|박스 입수|입고부족|입고 부족/.test(r)) return '입고·입수 부족'; if (/생산|산지|시즌|어획|작황|수급|미입고/.test(r)) return '생산·산지'; if (/설비|피킹|미출고|물류|파손|배송/.test(r)) return '설비·물류'; if (/품질|신선도/.test(r)) return '품질'; if (/한정수량|오설정|표기오류|설정|주문취소|취소/.test(r)) return '설정·운영'; return '기타'; }
+function selOpts(list, cur) { var seen = {}; var arr = list.slice(); if (cur && arr.indexOf(cur) < 0) arr.unshift(cur); return '<option value=""></option>' + arr.filter(function (v) { if (!v || seen[v]) return false; seen[v] = 1; return true; }).map(function (v) { return '<option' + (v === cur ? ' selected' : '') + '>' + esc(v) + '</option>'; }).join(''); }
+/* render()가 행마다 호출: 편집 중이면 입력칸, 아니면 ✏️ 단추 */
+function editCell(e) { var k = keyOf(e); if (editingKey === k) return '<td class="l nw"><button class="btn xs" data-act="save" data-ek="' + k + '">저장</button> <button class="btn xs" data-act="cancel">취소</button></td>'; return '<td class="l nw"><button class="btn xs" data-act="edit" data-ek="' + k + '" title="담당·유형·사유·입고예정일·대책 수정">✏️</button>' + (e.pending ? '<br><span class="sm" style="color:var(--warn)">미전송</span>' : (e.teamId ? '<br><span class="sm" style="color:var(--acc2)">팀 입력</span>' : '')) + '</td>'; }
+function editRowCells(e) { // 편집 중인 행의 담당/유형·사유/대책 칸
+  return { mgr: '<td class="l"><select data-f="mgr">' + selOpts(MGRS, e.mgr || '') + '</select></td>',
+    reason: '<td class="l"><select data-f="type" style="margin-bottom:4px">' + selOpts(TYPES, e.type || '') + '</select><br><input data-f="reason" value="' + esc(e.reason || '') + '" placeholder="결품 사유" style="width:220px"></td>',
+    action: '<td class="l"><input data-f="eta" type="date" value="' + esc(e.eta || '') + '" title="입고예정일"><br><input data-f="action" value="' + esc(e.action || '') + '" placeholder="대책" style="width:200px;margin-top:4px"></td>' };
+}
+document.addEventListener('click', function (ev) { var b = ev.target.closest('#listtbl button[data-act]'); if (!b) return; ev.preventDefault(); if (b.dataset.act === 'edit') startEdit(b.dataset.ek); else if (b.dataset.act === 'save') saveEdit(b.dataset.ek); else cancelEdit(); });
+document.addEventListener('keydown', function (ev) { if (!editingKey) return; if (ev.key === 'Escape') cancelEdit(); if (ev.key === 'Enter' && ev.target && ev.target.tagName === 'INPUT') saveEdit(editingKey); });
+$('btn-share').onclick = connectShare;
+/* 시작: 저장된 연결 복구 → 없으면 웹 사본 */
+(function () {
+  idbGet('handle').then(function (h) {
+    if (h && h.queryPermission) { shareHandle = h; return ensurePermission(false).then(function (ok) { if (ok) return syncShared(); return loadWebCopy().then(function () { shareState = '허용 필요'; showBanner('📡 공유파일 접근을 다시 허용해 주세요 — 허용하면 팀 입력이 바로 반영되고 내 편집도 전송됩니다.', '허용하고 재연결', connectShare); refreshStatus(); }); }); }
+    return loadWebCopy().then(function () { if (window.showOpenFilePicker) showBanner('📡 편집 내용을 팀과 공유하려면 공유서버(Z:)의 「결품보고_공유데이터.json」을 한 번만 선택해 주세요. (결품보고 대시보드에서 이미 연결했다면 허용만 하면 됩니다)', '공유파일 연결', connectShare); else showBanner('📱 이 브라우저는 공유 저장을 지원하지 않아 읽기·임시 편집만 됩니다. 팀 공유 입력은 PC Edge/Chrome에서.', '확인', hideBanner); });
+  }).catch(function () { loadWebCopy(); });
+  setInterval(function () { if (shareHandle && shareState === '연결') syncShared(); else if (!shareHandle) loadWebCopy(); }, 5 * 60 * 1000);
+  window.addEventListener('focus', function () { if (shareHandle && shareState === '연결') syncShared(); });
+})();
+
+</script>
 <script>
 var P = {"R":{"savedAt":"2026-11-20T03:57:01.577Z","기준":"2026-11-20 12:57","공급일":"2026-11-20","주차":47,"출고일":"2026-11-19","source":"ERP U_결품사유조회(연합) 배송일 2026-11-20 축수산팀 + WMS 출고진행현황 2026-11-19 출고분(결품만) — 2026-11-20 12:57 조회. 유형은 사유 기준 자동분류(담당 확인 필요), 입고예정일·대책은 담당 입력 필요","결품품목":5,"결품수량":9,"결품품목주문":981,"담당별":{"임준혁":3,"박상영":2},"유형별":{"설비·물류":1,"기타":1,"재고관리":1,"입고·입수 부족":2},"전팀":{"order":61987,"short":86,"rate":0.14,"orderers":47,"items":22},"ERP데이터없음":false,"WMS":{"출고일":"2026-11-19","결품품목":5,"전체행":60,"오류":"","ERP미반영":[]},"예보대조":{"기준":"2026-11-19 11:54 ERP","예상":1,"적중":1,"예상외":4,"빗나감":0,"예상목록":[{"code":"55876","nm":"(수)반건오징어채(원양산/150g)","short":5,"hit":true}]},"deleted":[]},"today":[{"id":"gai-20261120-19405","date":"2026-11-20","week":47,"mgr":"임준혁","no":19405,"name":"(수)벌교새꼬막(800g)","orderQty":576,"shortQty":5,"pickQty":571,"rate":0.008680555555555556,"type":"설비·물류","reason":"파손","reasonSrc":"WMS","places":"DAS 11차 1곳 — 미성5","wmsShort":5,"wmsEnt":"2026-11-19 22:27:49","eta":"","action":"","origin":"전국영어조합","part":"수산","forecast":"예보 없음"},{"id":"gai-20261120-50398","date":"2026-11-20","week":47,"mgr":"임준혁","no":50398,"name":"(수)남해안 생굴(500g)","orderQty":295,"shortQty":1,"pickQty":294,"rate":0.003389830508474576,"type":"기타","reason":"포장불량","reasonSrc":"WMS","places":"DAS 11차 1곳 — 논현1","wmsShort":1,"wmsEnt":"2026-11-19 22:27:49","eta":"","action":"","origin":"중앙씨푸드(주)","part":"수산","forecast":"예보 없음"},{"id":"gai-20261120-59090","date":"2026-11-20","week":47,"mgr":"박상영","no":59090,"name":"한우불고기(250g/암소)","orderQty":92,"shortQty":1,"pickQty":91,"rate":0.010869565217391304,"type":"재고관리","reason":"자동결품(재고부족)","reasonSrc":"WMS","places":"DAS 4차 1곳 — 덕소1","wmsShort":1,"wmsEnt":"2026-11-19 22:27:47","eta":"","action":"","origin":"(주)두레축산","part":"축산","forecast":"예보 없음"},{"id":"gai-20261120-48378","date":"2026-11-20","week":47,"mgr":"박상영","no":48378,"name":"닭다리(북채/500g)","orderQty":17,"shortQty":1,"pickQty":16,"rate":0.058823529411764705,"type":"입고·입수 부족","reason":"자동결품(입고부족)","reasonSrc":"WMS","places":"DAS 11차 1곳 — 소사1","wmsShort":1,"wmsEnt":"2026-11-19 22:27:49","eta":"","action":"","origin":"(주)한강식품","part":"축산","forecast":"예보 없음"},{"id":"gai-20261120-55876","date":"2026-11-20","week":47,"mgr":"임준혁","no":55876,"name":"(수)반건오징어채(원양산/150g)","orderQty":1,"shortQty":1,"pickQty":0,"rate":1,"type":"입고·입수 부족","reason":"자동결품(입고부족)","reasonSrc":"WMS","places":"DAS 3차 1곳 — 서부배송센터1","wmsShort":1,"wmsEnt":"2026-11-19 20:45:09","eta":"","action":"","origin":"(주)아침바다","part":"수산","forecast":"예보 적중"}],"hist":[{"공급일":"2026-11-04","주차":45,"기준":"2026-11-04 09:33","결품품목":3,"결품수량":3,"결품품목주문":19,"전팀":{"order":47318,"short":223,"rate":0.47,"orderers":60,"items":21},"담당별":{"임준혁":3},"유형별":{"설비·물류":1,"입고·입수 부족":2},"예보":{"예상":7,"적중":0,"예상외":3},"entries":[{"date":"2026-11-04","week":45,"mgr":"임준혁","no":54908,"name":"(수)냉장 손질갈치(300g/1미/가온)","orderQty":13,"shortQty":1,"type":"설비·물류","reason":"파손","places":"DAS 11차 1곳 — 오정1","origin":"(주)가온아이비","forecast":"예보 없음"},{"date":"2026-11-04","week":45,"mgr":"임준혁","no":54970,"name":"(수)냉장 손질꽁치(280g/원양산)","orderQty":4,"shortQty":1,"type":"입고·입수 부족","reason":"입수부족","places":"DAS 11차 1곳 — 죽전1","origin":"(주)가온아이비","forecast":"예보 없음"},{"date":"2026-11-04","week":45,"mgr":"임준혁","no":59320,"name":"(수)남해안 생물바지락(500g/가온)","orderQty":2,"shortQty":1,"type":"입고·입수 부족","reason":"입수부족","places":"DAS 11차 1곳 — 죽전1","origin":"(주)가온아이비","forecast":"예보 없음"}]},{"공급일":"2026-11-05","주차":45,"기준":"2026-11-05 08:00","결품품목":5,"결품수량":48,"결품품목주문":853,"전팀":{"order":53868,"short":224,"rate":0.42,"orderers":39,"items":27},"담당별":{"임준혁":1,"박상영":4},"유형별":{"미분류":5},"예보":{"예상":0,"적중":0,"예상외":5},"entries":[{"date":"2026-11-05","week":45,"mgr":"임준혁","no":37421,"name":"(수)구룡포 청어과메기(300g)","orderQty":21,"shortQty":21,"type":"","reason":"","places":"","origin":"보성수산","forecast":"예보 없음"},{"date":"2026-11-05","week":45,"mgr":"박상영","no":38635,"name":"제주흑돼지찜갈비(500g)","orderQty":82,"shortQty":18,"type":"","reason":"","places":"","origin":"(주)삼다","forecast":"예보 없음"},{"date":"2026-11-05","week":45,"mgr":"박상영","no":37970,"name":"제주흑돼지뒷다리살(불고기용/500g)","orderQty":480,"shortQty":6,"type":"","reason":"","places":"","origin":"(주)삼다","forecast":"예보 없음"},{"date":"2026-11-05","week":45,"mgr":"박상영","no":37976,"name":"(농할 국산)제주흑돼지삼겹살-수육용(400g)","orderQty":238,"shortQty":2,"type":"","reason":"","places":"","origin":"(주)삼다","forecast":"예보 없음"},{"date":"2026-11-05","week":45,"mgr":"박상영","no":37977,"name":"제주흑돼지안심(500g)","orderQty":32,"shortQty":1,"type":"","reason":"","places":"","origin":"(주)삼다","forecast":"예보 없음"}]},{"공급일":"2026-11-06","주차":45,"기준":"2026-11-06 08:00","결품품목":4,"결품수량":17,"결품품목주문":36,"전팀":{"order":49110,"short":394,"rate":0.8,"orderers":65,"items":34},"담당별":{"박상영":4},"유형별":{"미분류":4},"예보":{"예상":0,"적중":0,"예상외":4},"entries":[{"date":"2026-11-06","week":45,"mgr":"박상영","no":48379,"name":"순살닭다리살(500g)","orderQty":9,"shortQty":9,"type":"","reason":"","places":"","origin":"(주)한강식품","forecast":"예보 없음"},{"date":"2026-11-06","week":45,"mgr":"박상영","no":59229,"name":"(농할 국산)동물복지돼지 삼겹살(400g/구이)","orderQty":23,"shortQty":4,"type":"","reason":"","places":"","origin":"(주)미앤미","forecast":"예보 없음"},{"date":"2026-11-06","week":45,"mgr":"박상영","no":48377,"name":"생토막닭(1kg/볶음탕)","orderQty":3,"shortQty":3,"type":"","reason":"","places":"","origin":"(주)한강식품","forecast":"예보 없음"},{"date":"2026-11-06","week":45,"mgr":"박상영","no":49675,"name":"생통닭(551g/6호)","orderQty":1,"shortQty":1,"type":"","reason":"","places":"","origin":"(주)한강식품","forecast":"예보 없음"}]},{"공급일":"2026-11-07","주차":45,"기준":"2026-11-07 08:00","결품품목":0,"결품수량":0,"결품품목주문":0,"전팀":{"order":21814,"short":226,"rate":1.04,"orderers":15,"items":16},"담당별":{},"유형별":{},"예보":{"예상":0,"적중":0,"예상외":0},"entries":[]},{"공급일":"2026-11-08","주차":45,"기준":"2026-11-08 08:00","결품품목":0,"결품수량":0,"결품품목주문":0,"전팀":{"order":0,"short":0,"rate":0,"orderers":0,"items":0},"담당별":{},"유형별":{},"예보":{"예상":0,"적중":0,"예상외":0},"entries":[]},{"공급일":"2026-11-09","주차":46,"기준":"2026-11-09 08:00","결품품목":2,"결품수량":2,"결품품목주문":567,"전팀":{"order":78876,"short":550,"rate":0.7,"orderers":116,"items":21},"담당별":{"임준혁":1,"박상영":1},"유형별":{"미분류":2},"예보":{"예상":0,"적중":0,"예상외":2},"entries":[{"date":"2026-11-09","week":46,"mgr":"임준혁","no":50397,"name":"남해안 생굴(150g)","orderQty":544,"shortQty":1,"type":"","reason":"","places":"","origin":"중앙씨푸드(주)","forecast":"예보 없음"},{"date":"2026-11-09","week":46,"mgr":"박상영","no":48909,"name":"(임)무항 한우 등심로스(200g)","orderQty":23,"shortQty":1,"type":"","reason":"","places":"","origin":"(주)두레축산","forecast":"예보 없음"}]},{"공급일":"2026-11-10","주차":46,"기준":"2026-11-10 08:00","결품품목":1,"결품수량":1,"결품품목주문":18,"전팀":{"order":52950,"short":188,"rate":0.36,"orderers":56,"items":17},"담당별":{"임준혁":1},"유형별":{"미분류":1},"예보":{"예상":0,"적중":0,"예상외":1},"entries":[{"date":"2026-11-10","week":46,"mgr":"임준혁","no":55876,"name":"반건오징어채(원양산/150g)","orderQty":18,"shortQty":1,"type":"","reason":"","places":"","origin":"(주)아침바다","forecast":"예보 없음"}]},{"공급일":"2026-11-11","주차":46,"기준":"2026-11-11 08:00","결품품목":0,"결품수량":0,"결품품목주문":0,"전팀":{"order":55708,"short":231,"rate":0.41,"orderers":16,"items":12},"담당별":{},"유형별":{},"예보":{"예상":0,"적중":0,"예상외":0},"entries":[]},{"공급일":"2026-11-12","주차":46,"기준":"2026-11-12 08:00","결품품목":4,"결품수량":15,"결품품목주문":95,"전팀":{"order":60562,"short":181,"rate":0.3,"orderers":48,"items":16},"담당별":{"임준혁":4},"유형별":{"미분류":4},"예보":{"예상":3,"적중":3,"예상외":1},"entries":[{"date":"2026-11-12","week":46,"mgr":"임준혁","no":41543,"name":"구룡포 생물대게(3미/1.2kg내외)","orderQty":7,"shortQty":7,"type":"","reason":"","places":"","origin":"보성수산","forecast":"예보 적중"},{"date":"2026-11-12","week":46,"mgr":"임준혁","no":50398,"name":"남해안 생굴(500g)","orderQty":83,"shortQty":3,"type":"","reason":"","places":"","origin":"중앙씨푸드(주)","forecast":"예보 없음"},{"date":"2026-11-12","week":46,"mgr":"임준혁","no":37421,"name":"구룡포 청어과메기(300g)","orderQty":3,"shortQty":3,"type":"","reason":"","places":"","origin":"보성수산","forecast":"예보 적중"},{"date":"2026-11-12","week":46,"mgr":"임준혁","no":8268,"name":"디포리(200g)","orderQty":2,"shortQty":2,"type":"","reason":"","places":"","origin":"삼양수산","forecast":"예보 적중"}]},{"공급일":"2026-11-13","주차":46,"기준":"2026-11-13 08:00","결품품목":0,"결품수량":0,"결품품목주문":0,"전팀":{"order":65238,"short":160,"rate":0.25,"orderers":80,"items":24},"담당별":{},"유형별":{},"예보":{"예상":1,"적중":0,"예상외":0},"entries":[]},{"공급일":"2026-11-14","주차":46,"기준":"2026-11-14 08:00","결품품목":0,"결품수량":0,"결품품목주문":0,"전팀":{"order":23892,"short":83,"rate":0.35,"orderers":7,"items":10},"담당별":{},"유형별":{},"예보":{"예상":1,"적중":0,"예상외":0},"entries":[]},{"공급일":"2026-11-15","주차":46,"기준":"2026-11-15 08:00","결품품목":0,"결품수량":0,"결품품목주문":0,"전팀":{"order":0,"short":0,"rate":0,"orderers":0,"items":0},"담당별":{},"유형별":{},"예보":{"예상":0,"적중":0,"예상외":0},"entries":[]},{"공급일":"2026-11-16","주차":47,"기준":"2026-11-16 08:00","결품품목":0,"결품수량":0,"결품품목주문":0,"전팀":{"order":81274,"short":418,"rate":0.51,"orderers":22,"items":25},"담당별":{},"유형별":{},"예보":{"예상":0,"적중":0,"예상외":0},"entries":[]},{"공급일":"2026-11-17","주차":47,"기준":"2026-11-17 08:00","결품품목":1,"결품수량":1,"결품품목주문":95,"전팀":{"order":52870,"short":174,"rate":0.33,"orderers":33,"items":22},"담당별":{"박상영":1},"유형별":{"미분류":1},"예보":{"예상":0,"적중":0,"예상외":1},"entries":[{"date":"2026-11-17","week":47,"mgr":"박상영","no":10672,"name":"돼지고기(300g/찌개용)","orderQty":95,"shortQty":1,"type":"","reason":"","places":"","origin":"씨알살림축산(주)","forecast":"예보 없음"}]},{"공급일":"2026-11-18","주차":47,"기준":"2026-11-18 08:00","결품품목":0,"결품수량":0,"결품품목주문":0,"전팀":{"order":55730,"short":39,"rate":0.07,"orderers":19,"items":17},"담당별":{},"유형별":{},"예보":{"예상":5,"적중":0,"예상외":0},"entries":[]},{"공급일":"2026-11-19","주차":47,"기준":"2026-11-19 08:00","결품품목":2,"결품수량":5,"결품품목주문":62,"전팀":{"order":56237,"short":199,"rate":0.35,"orderers":20,"items":23},"담당별":{"임준혁":1,"박상영":1},"유형별":{"미분류":2},"예보":{"예상":1,"적중":1,"예상외":1},"entries":[{"date":"2026-11-19","week":47,"mgr":"임준혁","no":55876,"name":"(수)반건오징어채(원양산/150g)","orderQty":9,"shortQty":4,"type":"","reason":"","places":"","origin":"(주)아침바다","forecast":"예보 적중"},{"date":"2026-11-19","week":47,"mgr":"박상영","no":57259,"name":"푸짐한 토막닭(1.4kg/13호)","orderQty":53,"shortQty":1,"type":"","reason":"","places":"","origin":"(주)대경식품","forecast":"예보 없음"}]},{"공급일":"2026-11-20","주차":47,"기준":"2026-11-20 12:57","결품품목":5,"결품수량":9,"결품품목주문":981,"전팀":{"order":61987,"short":86,"rate":0.14,"orderers":47,"items":22},"담당별":{"임준혁":3,"박상영":2},"유형별":{"설비·물류":1,"기타":1,"재고관리":1,"입고·입수 부족":2},"예보":{"예상":1,"적중":1,"예상외":4},"entries":[{"date":"2026-11-20","week":47,"mgr":"임준혁","no":19405,"name":"(수)벌교새꼬막(800g)","orderQty":576,"shortQty":5,"type":"설비·물류","reason":"파손","places":"DAS 11차 1곳 — 미성5","origin":"전국영어조합","forecast":"예보 없음"},{"date":"2026-11-20","week":47,"mgr":"임준혁","no":50398,"name":"(수)남해안 생굴(500g)","orderQty":295,"shortQty":1,"type":"기타","reason":"포장불량","places":"DAS 11차 1곳 — 논현1","origin":"중앙씨푸드(주)","forecast":"예보 없음"},{"date":"2026-11-20","week":47,"mgr":"박상영","no":59090,"name":"한우불고기(250g/암소)","orderQty":92,"shortQty":1,"type":"재고관리","reason":"자동결품(재고부족)","places":"DAS 4차 1곳 — 덕소1","origin":"(주)두레축산","forecast":"예보 없음"},{"date":"2026-11-20","week":47,"mgr":"박상영","no":48378,"name":"닭다리(북채/500g)","orderQty":17,"shortQty":1,"type":"입고·입수 부족","reason":"자동결품(입고부족)","places":"DAS 11차 1곳 — 소사1","origin":"(주)한강식품","forecast":"예보 없음"},{"date":"2026-11-20","week":47,"mgr":"임준혁","no":55876,"name":"(수)반건오징어채(원양산/150g)","orderQty":1,"shortQty":1,"type":"입고·입수 부족","reason":"자동결품(입고부족)","places":"DAS 3차 1곳 — 서부배송센터1","origin":"(주)아침바다","forecast":"예보 적중"}]}],"restore":{"savedAt":"2026-11-20T03:57:01.577Z","source":"ERP U_결품사유조회(연합) 배송일 2026-11-20 축수산팀 + WMS 출고진행현황 2026-11-19 출고분(결품만) — 2026-11-20 12:57 조회. 유형은 사유 기준 자동분류(담당 확인 필요), 입고예정일·대책은 담당 입력 필요","entries":[{"id":"gai-20261120-19405","date":"2026-11-20","week":47,"mgr":"임준혁","no":19405,"name":"(수)벌교새꼬막(800g)","orderQty":576,"shortQty":5,"pickQty":571,"rate":0.008680555555555556,"type":"설비·물류","reason":"파손","reasonSrc":"WMS","places":"DAS 11차 1곳 — 미성5","wmsShort":5,"wmsEnt":"2026-11-19 22:27:49","eta":"","action":"","origin":"전국영어조합","part":"수산","forecast":"예보 없음"},{"id":"gai-20261120-50398","date":"2026-11-20","week":47,"mgr":"임준혁","no":50398,"name":"(수)남해안 생굴(500g)","orderQty":295,"shortQty":1,"pickQty":294,"rate":0.003389830508474576,"type":"기타","reason":"포장불량","reasonSrc":"WMS","places":"DAS 11차 1곳 — 논현1","wmsShort":1,"wmsEnt":"2026-11-19 22:27:49","eta":"","action":"","origin":"중앙씨푸드(주)","part":"수산","forecast":"예보 없음"},{"id":"gai-20261120-59090","date":"2026-11-20","week":47,"mgr":"박상영","no":59090,"name":"한우불고기(250g/암소)","orderQty":92,"shortQty":1,"pickQty":91,"rate":0.010869565217391304,"type":"재고관리","reason":"자동결품(재고부족)","reasonSrc":"WMS","places":"DAS 4차 1곳 — 덕소1","wmsShort":1,"wmsEnt":"2026-11-19 22:27:47","eta":"","action":"","origin":"(주)두레축산","part":"축산","forecast":"예보 없음"},{"id":"gai-20261120-48378","date":"2026-11-20","week":47,"mgr":"박상영","no":48378,"name":"닭다리(북채/500g)","orderQty":17,"shortQty":1,"pickQty":16,"rate":0.058823529411764705,"type":"입고·입수 부족","reason":"자동결품(입고부족)","reasonSrc":"WMS","places":"DAS 11차 1곳 — 소사1","wmsShort":1,"wmsEnt":"2026-11-19 22:27:49","eta":"","action":"","origin":"(주)한강식품","part":"축산","forecast":"예보 없음"},{"id":"gai-20261120-55876","date":"2026-11-20","week":47,"mgr":"임준혁","no":55876,"name":"(수)반건오징어채(원양산/150g)","orderQty":1,"shortQty":1,"pickQty":0,"rate":1,"type":"입고·입수 부족","reason":"자동결품(입고부족)","reasonSrc":"WMS","places":"DAS 3차 1곳 — 서부배송센터1","wmsShort":1,"wmsEnt":"2026-11-19 20:45:09","eta":"","action":"","origin":"(주)아침바다","part":"수산","forecast":"예보 적중"}],"deleted":[]}};
 var R = P.R, TODAY = P.today, hist = P.hist, RESTORE = P.restore;
@@ -179,18 +309,19 @@ function render() {
   var sorted = f.slice().sort(function (a, b) { var x = a[sortKey], y = b[sortKey]; if (sortKey === 'rate') { x = a.orderQty ? a.shortQty / a.orderQty : 0; y = b.orderQty ? b.shortQty / b.orderQty : 0; } if (typeof x === 'string') return sortDir * x.localeCompare(y, 'ko'); return sortDir * ((x || 0) - (y || 0)); });
   var arrow = function (k) { return sortKey === k ? '<span class="arr">' + (sortDir > 0 ? '▲' : '▼') + '</span>' : ''; };
   var TH = function (k, label, cls) { return '<th' + (cls ? ' class="' + cls + '"' : '') + ' data-sort="' + k + '" title="클릭하여 정렬">' + label + ' ' + arrow(k) + '</th>'; };
-  var trs = sorted.map(function (e) {
-    return '<tr class="' + (e.date === R.공급일 ? 'today' : '') + '">' +
+  var trs = sorted.map(function (e0) {
+    var e = ov(e0), ek = keyOf(e), ed = editingKey === ek, EC = ed ? editRowCells(e) : null;
+    return '<tr class="' + (e.date === R.공급일 ? 'today' : '') + (ed ? ' editing' : '') + '" data-ek="' + ek + '">' + editCell(e) +
       '<td class="l dim">' + md(e.date) + '<br><span class="sm">' + e.week + '주</span></td>' +
-      '<td class="l dim nw">' + esc(e.mgr || '-') + '</td>' +
+      (ed ? EC.mgr : '<td class="l dim nw">' + esc(e.mgr || '-') + '</td>') +
       '<td class="l nm"><b>' + esc(e.name) + '</b> <span class="sm">' + e.no + '</span></td>' +
       '<td>' + fmtN(e.orderQty) + '</td><td><b style="color:var(--down)">' + fmtN(e.shortQty) + '</b>' + (e.wmsShort != null && e.wmsShort !== e.shortQty ? '<br><span class="sm">WMS ' + fmtN(e.wmsShort) + '</span>' : '') + '</td>' +
       '<td>' + pct(e.shortQty, e.orderQty) + '</td>' +
-      '<td class="l">' + (e.type ? '<span class="pill">' + esc(e.type) + '</span> ' : '') + (e.reason ? esc(e.reason) + (e.reasonSrc === 'WMS' ? ' <span class="sm">(WMS)</span>' : '') : '<span class="sm">사유 미입력</span>') + (e.forecast === '예보 적중' ? '<br><span class="pill warn">전일 예보 적중</span>' : '') + '</td>' +
+      (ed ? EC.reason : '<td class="l">' + (e.type ? '<span class="pill">' + esc(e.type) + '</span> ' : '') + (e.reason ? esc(e.reason) + (e.reasonSrc === 'WMS' ? ' <span class="sm">(WMS)</span>' : e.reasonSrc === '팀' ? ' <span class="sm" style="color:var(--acc2)">(팀 입력)</span>' : '') : '<span class="sm">사유 미입력</span>') + (e.forecast === '예보 적중' ? '<br><span class="pill warn">전일 예보 적중</span>' : '') + '</td>') +
       '<td class="l sm" style="max-width:260px">' + esc(e.places || '') + '</td>' +
-      '<td class="l dim">' + esc(e.action || e.eta || '') + '</td>' +
+      (ed ? EC.action : '<td class="l dim">' + esc(e.action || '') + (e.eta ? (e.action ? '<br>' : '') + '<span class="sm">입고예정 ' + esc(e.eta) + '</span>' : '') + '</td>') +
       '<td class="l dim sm">' + esc(e.origin || '') + '</td></tr>'; }).join('');
-  $('listtbl').innerHTML = '<thead><tr>' + TH('date', '날짜', 'l') + TH('mgr', '담당', 'l') + TH('name', '생활재', 'l') + TH('orderQty', '주문') + TH('shortQty', '결품') + TH('rate', '결품률') + TH('type', '유형 · 사유', 'l') + TH('places', '출고처(WMS)', 'l') + TH('action', '대책/예정', 'l') + TH('origin', '생산지', 'l') + '</tr></thead><tbody>' + (trs || '<tr><td colspan="10" class="l dim" style="padding:18px">결품이 없습니다 👍</td></tr>') + '</tbody>';
+  $('listtbl').innerHTML = '<thead><tr><th class="l" style="cursor:default">편집</th>' + TH('date', '날짜', 'l') + TH('mgr', '담당', 'l') + TH('name', '생활재', 'l') + TH('orderQty', '주문') + TH('shortQty', '결품') + TH('rate', '결품률') + TH('type', '유형 · 사유', 'l') + TH('places', '출고처(WMS)', 'l') + TH('action', '대책/예정', 'l') + TH('origin', '생산지', 'l') + '</tr></thead><tbody>' + (trs || '<tr><td colspan="10" class="l dim" style="padding:18px">결품이 없습니다 👍</td></tr>') + '</tbody>';
   Array.prototype.forEach.call(document.querySelectorAll('#listtbl th[data-sort]'), function (th) { th.onclick = function () { var k = th.dataset.sort; if (sortKey === k) sortDir = -sortDir; else { sortKey = k; sortDir = -1; } render(); }; });
 }
 Array.prototype.forEach.call(document.querySelectorAll('.ctg'), function (b) { b.onclick = function () { Array.prototype.forEach.call(document.querySelectorAll('.ctg'), function (x) { x.classList.remove('on'); }); b.classList.add('on'); days = +b.dataset.f; render(); }; });
