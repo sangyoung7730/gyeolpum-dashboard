@@ -109,7 +109,7 @@
   <section class="panel">
     <h2>📋 결품 내역 <span class="sm" id="tbl-sub"></span></h2>
     <div class="tblwrap"><table id="listtbl"></table></div>
-    <p class="note"><b>주문·결품</b> = ERP U_결품사유조회(연합) 배송일 기준 축수산팀 행(결품이 있는 주문만 집계된 화면) · <b>유형</b> = 사유 글귀로 자동분류(결품보고 대시보드와 같은 규칙, 담당 확인 필요) · <b>편집</b> = ✏️로 담당·유형·사유·입고예정일·대책을 고치면 팀 공유파일(결품보고 대시보드와 같은 파일)에 저장되고 「팀 입력」으로 표시 · <b>사유</b> = ERP 결품사유, 비어 있으면 WMS 결품 메모(WMS 표시) · <b>출고처</b> = WMS 출고 진행 현황 11/23 출고분의 차수·출고처별 결품수량 · <b>대책/예정</b>은 결품보고 대시보드에서 담당이 입력합니다(여기엔 자동 보고 시점의 값만). <b>생산지·담당</b>은 생활재 마스터(매일 06:40 갱신) 기준.</p>
+    <p class="note"><b>주문·결품</b> = ERP U_결품사유조회(연합) 배송일 기준 축수산팀 행(결품이 있는 주문만 집계된 화면) · <b>유형</b> = 사유 글귀로 자동분류(결품보고 대시보드와 같은 규칙, 담당 확인 필요) · <b>편집</b> = ✏️로 담당·유형·사유·입고예정일·대책을 고치면 팀 공유파일(결품보고 대시보드와 같은 파일)에 저장되고 「팀 입력」으로 표시 · <b>사유</b> = ERP 결품사유, 비어 있으면 WMS 결품 메모(WMS 표시) · <b>대책/예정</b>은 결품보고 대시보드에서 담당이 입력합니다(여기엔 자동 보고 시점의 값만). <b>생산지·담당</b>은 생활재 마스터(매일 06:40 갱신) 기준.</p>
   </section>
 </div></div>
 <div id="toast"></div>
@@ -319,9 +319,8 @@ function render() {
       '<td>' + pct(e.shortQty, e.orderQty) + '</td>' +
       (ed ? EC.reason : '<td class="l">' + (e.reason ? esc(e.reason) + (e.reasonSrc === 'WMS' ? ' <span class="sm">(WMS)</span>' : e.reasonSrc === '팀' ? ' <span class="sm" style="color:var(--acc2)">(팀 입력)</span>' : '') : '<span class="sm">사유 미입력</span>') + (e.forecast === '예보 적중' ? '<br><span class="pill warn">전일 예보 적중</span>' : '') + '</td>') +
       (ed ? EC.action : '<td class="l dim">' + esc(e.action || '') + (e.eta ? (e.action ? '<br>' : '') + '<span class="sm">입고예정 ' + esc(e.eta) + '</span>' : '') + '</td>') +
-      '<td class="l sm" style="max-width:260px">' + esc(e.places || '') + '</td>' +
       '<td class="l dim sm">' + esc(e.origin || '') + '</td></tr>'; }).join('');
-  $('listtbl').innerHTML = '<thead><tr><th class="l" style="cursor:default">편집</th>' + TH('date', '날짜', 'l') + TH('mgr', '담당', 'l') + TH('name', '생활재', 'l') + TH('orderQty', '주문') + TH('shortQty', '결품') + TH('rate', '결품률') + TH('reason', '사유', 'l') + TH('action', '대책/예정', 'l') + TH('places', '출고처(WMS)', 'l') + TH('origin', '생산지', 'l') + '</tr></thead><tbody>' + (trs || '<tr><td colspan="10" class="l dim" style="padding:18px">결품이 없습니다 👍</td></tr>') + '</tbody>';
+  $('listtbl').innerHTML = '<thead><tr><th class="l" style="cursor:default">편집</th>' + TH('date', '날짜', 'l') + TH('mgr', '담당', 'l') + TH('name', '생활재', 'l') + TH('orderQty', '주문') + TH('shortQty', '결품') + TH('rate', '결품률') + TH('reason', '사유', 'l') + TH('action', '대책/예정', 'l') + TH('origin', '생산지', 'l') + '</tr></thead><tbody>' + (trs || '<tr><td colspan="10" class="l dim" style="padding:18px">결품이 없습니다 👍</td></tr>') + '</tbody>';
   Array.prototype.forEach.call(document.querySelectorAll('#listtbl th[data-sort]'), function (th) { th.onclick = function () { var k = th.dataset.sort; if (sortKey === k) sortDir = -sortDir; else { sortKey = k; sortDir = -1; } render(); }; });
 }
 Array.prototype.forEach.call(document.querySelectorAll('.ctg'), function (b) { b.onclick = function () { Array.prototype.forEach.call(document.querySelectorAll('.ctg'), function (x) { x.classList.remove('on'); }); b.classList.add('on'); days = +b.dataset.f; render(); }; });
