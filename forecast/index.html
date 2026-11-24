@@ -103,7 +103,7 @@
   <section class="panel">
     <h2>📋 품목별 상세</h2>
     <div class="tblwrap"><table id="listtbl"></table></div>
-    <p class="note">주문 = 11/25 배송 총주문집계 합계수량 · 재고 = 물류센터 11/23 마감 당일재고 · 출고 = 재고마감 다음날~오늘 배송분 주문 · 입고 = 같은 기간 입고예정(WMS 입고 진행 현황) · 가용 = 재고 − 출고 + 입고 · 예상결품 = 주문 − 가용(가용이 마이너스면 0으로 보고 주문수량까지만).
+    <p class="note">주문 = 11/25 배송 총주문집계 합계수량 · 가용 = 물류센터 11/23 마감 재고 − 재고마감 다음날~오늘 배송분 주문 + 같은 기간 입고예정(WMS 입고 진행 현황) — 재고·출고·입고 수량은 계산에만 쓰고 표에는 표시하지 않습니다 · 예상결품 = 주문 − 가용(가용이 마이너스면 0으로 보고 주문수량까지만).
     <b>입고예정(공급일 대비)</b>은 재고마감 다음날부터 공급일 뒤 2주까지의 WMS 입고예정을 날짜별로 공급일(11/25)과 대조한 것입니다 — <span class="pill ok">반영</span> 공급일 전 입고(가용 포함) · <span class="pill ok">당일</span> 공급일 당일 냉장·상온(가용 포함) · <span class="pill warn">당일·냉동</span> 다음날부터 피킹이라 제외 · <span class="pill bad">+n일</span> 공급일보다 n일 늦어 이번 공급엔 못 씀 · <b>미등록!</b> 예정일이 지났는데 WMS 입고 등록이 없음. 결품 품목은 "충당 가능일"(입고예정을 날짜순으로 더해 주문을 처음 채우는 날)을 비고에 둡니다. "없음"은 그 기간에 잡힌 입고가 없다는 뜻입니다.
     <b>공급일 당일 입고예정</b>은 냉장·상온 품목이면 가용에 넣고, 냉동 품목은 전날까지 입고돼야 피킹이 가능해 넣지 않습니다(비고에 표시). "재고행 없음"은 종합수불부에 해당 품목 행이 없어 재고 0으로 본 경우입니다.</p>
   </section>
@@ -230,7 +230,7 @@ function render() {
       '<td class="dim">' + (r.mgr || '-') + '</td>' +
       '<td class="l"><b>' + r.nm + '</b> <span style="font-size:11.5px;color:var(--ink-3)">' + r.code + '</span><br><span style="font-size:11.5px;color:var(--ink-3)">' + (r.cat || '') + (r.sub ? ' · ' + r.sub : '') + '</span></td>' +
       '<td>' + fmtN(r.order) + '<br><span style="font-size:11px;color:var(--ink-3)">매장 ' + fmtN(r.maejang) + ' · 택배 ' + fmtN(r.tb) + '</span></td>' +
-      '<td>' + fmtN(r.stock) + '</td><td class="dim">' + (r.oMid ? '−' + fmtN(r.oMid) : '0') + '</td><td class="dim">' + ((r.inMid + (r.inDeliUsed || 0)) ? '+' + fmtN(r.inMid + (r.inDeliUsed || 0)) : '0') + (r.inDeliUsed ? '<br><span style="font-size:11px;color:var(--ink-3)">당일 ' + fmtN(r.inDeliUsed) + '</span>' : '') + '</td>' +
+      // 재고·출고·입고 열은 표시하지 않는다 — 가용 계산에는 그대로 쓴다 (팀장 지시 2026-11-24)
       '<td><b>' + fmtN(r.avail) + '</b></td>' +
       '<td>' + (r.short > 0 ? '<b style="color:var(--down)">' + fmtN(r.short) + '</b>' : '-') + '</td>' +
       '<td>' + (r.short > 0 ? (r.rate * 100).toFixed(0) + '%' : '-') + '</td>' +
@@ -242,7 +242,7 @@ function render() {
       '<td class="dim">' + (r.store || '') + '</td>' +
       '<td class="l dim" style="font-size:12px">' + memo.join(' · ') + '</td></tr>'; }).join('');
   $('listtbl').innerHTML = '<thead><tr>' + TH('code', '날짜', 'l') + TH('mgr', '담당', 'l') + TH('nm', '생활재', 'l') +
-    TH('order', '주문') + TH('stock', '재고<br><span style="font-weight:400;font-size:11px">' + md(R.재고마감일) + ' 마감</span>') + TH('oMid', '출고') + TH('inMid', '입고') + TH('avail', '가용') + TH('short', '예상결품') + TH('rate', '결품률') + TH('nextInDt', '입고예정(공급일 대비)', 'l') +
+    TH('order', '주문') + TH('avail', '가용') + TH('short', '예상결품') + TH('rate', '결품률') + TH('nextInDt', '입고예정(공급일 대비)', 'l') +
     TH('short', '판정', 'l') + TH('store', '보관') + TH('inDeli', '비고', 'l') + '</tr></thead><tbody>' + trs + '</tbody>';
   Array.prototype.forEach.call(document.querySelectorAll('#listtbl th[data-sort]'), function (th) {
     th.onclick = function () { var k = th.dataset.sort; if (sortKey === k) sortDir = -sortDir; else { sortKey = k; sortDir = -1; } render(); }; });
@@ -252,8 +252,8 @@ Array.prototype.forEach.call(document.querySelectorAll('.ctg'), function (b) { b
 ['flt-mgr', 'flt-store', 'flt-cat'].forEach(function (id) { $(id).onchange = render; });
 
 function csvRows() {
-  var head = ['공급일', '담당', '생활재번호', '생활재명', '대분류', '중분류', '주문', '매장', '택배', '재고', '출고', '입고', '가용', '예상결품', '결품률', '입고예정(공급일대비)', '충당가능일', '미등록입고', '보관', '당일입고', '재고기준일'];
-  var body = filtered().map(function (r) { return [R.공급일, r.mgr, r.code, r.nm, r.cat, r.sub, r.order, r.maejang, r.tb, r.stock, r.oMid, r.inMid, r.avail, r.short, r.short > 0 ? (r.rate * 100).toFixed(0) + '%' : '',
+  var head = ['공급일', '담당', '생활재번호', '생활재명', '대분류', '중분류', '주문', '매장', '택배', '가용', '예상결품', '결품률', '입고예정(공급일대비)', '충당가능일', '미등록입고', '보관', '당일입고', '재고기준일'];
+  var body = filtered().map(function (r) { return [R.공급일, r.mgr, r.code, r.nm, r.cat, r.sub, r.order, r.maejang, r.tb, r.avail, r.short, r.short > 0 ? (r.rate * 100).toFixed(0) + '%' : '',
     (r.ins || []).map(function (x) { return x.dt + '(' + x.qty + (x.judge === '늦음' ? ' +' + x.lag + '일' : x.judge === '당일제외' ? ' 당일냉동제외' : x.judge === '당일반영' ? ' 당일' : x.overdue ? ' 미등록' : ' 반영') + ')'; }).join(' '),
     r.coverDt || '', r.overdue || 0, r.store, r.inDeli, r.stockDt || '']; });
   return [head].concat(body);
