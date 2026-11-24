@@ -19,7 +19,7 @@
   body{margin:0}
   .viz-root { font-family:"Segoe UI","Malgun Gothic",system-ui,sans-serif; background:var(--page); color:var(--ink-1);
     margin:0; padding:24px 20px 48px; line-height:1.5; font-size:14px; }
-  .wrap { max-width:1100px; margin:0 auto; display:flex; flex-direction:column; gap:16px; }
+  .wrap { max-width:1400px; margin:0 auto; display:flex; flex-direction:column; gap:16px; }
   .hd { display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:10px; }
   .hd h1 { font-size:20px; font-weight:700; margin:0; }
   .hd .sub { color:var(--ink-2); font-size:12.5px; }
@@ -54,7 +54,10 @@
   th:hover { background:color-mix(in srgb, var(--acc) 26%, var(--surface-1)); }
   th .arr { font-size:10px; color:var(--acc); }
   th.l, td.l { text-align:left; }
-  td { text-align:right; padding:7px 7px; border-bottom:1px solid var(--grid); font-variant-numeric:tabular-nums; white-space:nowrap; line-height:1.4; }
+  td { text-align:right; padding:4px 7px; border-bottom:1px solid var(--grid); font-variant-numeric:tabular-nums; white-space:nowrap; line-height:1.3; }
+  #listtbl th.memo, #listtbl td.memo { min-width:300px; }
+  #listtbl td.nmc { min-width:200px; }
+  .pill { white-space:nowrap; }
   td.l { white-space:normal; }
   td.dim { color:var(--ink-2); }
   tr.short td { background:color-mix(in srgb, var(--down) 7%, var(--surface-1)); }
@@ -228,7 +231,7 @@ function render() {
     return '<tr class="' + cls + '">' +
       '<td class="dim">' + md(R.공급일) + '<br><span style="font-size:11.5px">' + R.주차 + '주</span></td>' +
       '<td class="dim">' + (r.mgr || '-') + '</td>' +
-      '<td class="l"><b>' + r.nm + '</b> <span style="font-size:11.5px;color:var(--ink-3)">' + r.code + '</span><br><span style="font-size:11.5px;color:var(--ink-3)">' + (r.cat || '') + (r.sub ? ' · ' + r.sub : '') + '</span></td>' +
+      '<td class="l nmc"><b>' + r.nm + '</b> <span style="font-size:11.5px;color:var(--ink-3)">' + r.code + '</span><br><span style="font-size:11.5px;color:var(--ink-3)">' + (r.cat || '') + (r.sub ? ' · ' + r.sub : '') + '</span></td>' +
       '<td>' + fmtN(r.order) + '<br><span style="font-size:11px;color:var(--ink-3)">매장 ' + fmtN(r.maejang) + ' · 택배 ' + fmtN(r.tb) + '</span></td>' +
       // 재고·출고·입고 열은 표시하지 않는다 — 가용 계산에는 그대로 쓴다 (팀장 지시 2026-11-24)
       '<td><b>' + fmtN(r.avail) + '</b></td>' +
@@ -240,10 +243,10 @@ function render() {
           : (r.short > 0 && !r.direct ? '<b style="color:var(--down)">없음</b>' : '<span class="dim">—</span>'))) + '</td>' +
       '<td class="l">' + pill + '</td>' +
       '<td class="dim">' + (r.store || '') + '</td>' +
-      '<td class="l dim" style="font-size:12px">' + memo.join(' · ') + '</td></tr>'; }).join('');
+      '<td class="l dim memo" style="font-size:12px">' + memo.join(' · ') + '</td></tr>'; }).join('');
   $('listtbl').innerHTML = '<thead><tr>' + TH('code', '날짜', 'l') + TH('mgr', '담당', 'l') + TH('nm', '생활재', 'l') +
     TH('order', '주문') + TH('avail', '가용') + TH('short', '예상결품') + TH('rate', '결품률') + TH('nextInDt', '입고예정(공급일 대비)', 'l') +
-    TH('short', '판정', 'l') + TH('store', '보관') + TH('inDeli', '비고', 'l') + '</tr></thead><tbody>' + trs + '</tbody>';
+    TH('short', '판정', 'l') + TH('store', '보관') + TH('inDeli', '비고', 'l memo') + '</tr></thead><tbody>' + trs + '</tbody>';
   Array.prototype.forEach.call(document.querySelectorAll('#listtbl th[data-sort]'), function (th) {
     th.onclick = function () { var k = th.dataset.sort; if (sortKey === k) sortDir = -sortDir; else { sortKey = k; sortDir = -1; } render(); }; });
 }
